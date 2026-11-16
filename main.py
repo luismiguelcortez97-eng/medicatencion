@@ -43,8 +43,8 @@ init_db()
 def auth(authorization: str | None = Header(default=None)):
     try:
         if not authorization or not authorization.startswith("Bearer "): raise ValueError()
-        u, exp, sig = authorization[7:].split(".", 2)
-        payload = u + ":" + exp
+        payload, sig = authorization[7:].rsplit(".", 1)
+        u, exp = payload.rsplit(":", 1)
         expected = hmac.new(SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
         if int(exp) < int(datetime.utcnow().timestamp()) or not hmac.compare_digest(sig, expected): raise ValueError()
         with con() as c:
