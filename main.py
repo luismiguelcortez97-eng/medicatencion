@@ -60,10 +60,10 @@ def make_token(u):
 
 class Cred(BaseModel):
     username: str = Field(min_length=3,max_length=60,pattern=r"^[\w.-]+$")
-    password: str = Field(min_length=12,max_length=200)
+    password: str = Field(min_length=6,max_length=200)
 class Recovery(BaseModel):
     recovery_key: str = Field(min_length=32, max_length=256)
-    new_password: str = Field(min_length=12, max_length=200)
+    new_username: str = Field(default="DOC", min_length=3, max_length=60, pattern=r"^[\\w.-]+$")\n    new_password: str = Field(min_length=6, max_length=200)
 
 class Data(BaseModel):
     data: dict
@@ -143,7 +143,7 @@ def recover_owner(x:Recovery):
         c.execute("SELECT id FROM users ORDER BY id LIMIT 1 FOR UPDATE")
         owner=c.fetchone()
         if not owner: raise HTTPException(404,"No existe una cuenta propietaria para recuperar.")
-        c.execute("UPDATE users SET salt=%s,hash=%s WHERE id=%s",(salt,hashed,owner["id"]))
+        c.execute("UPDATE users SET username=%s,salt=%s,hash=%s WHERE id=%s",(x.new_username,salt,hashed,owner["id"]))
     return {"ok":True,"message":"Contraseña del propietario actualizada. Los registros se conservaron."}
 
 @app.get("/api/data")
