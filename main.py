@@ -63,7 +63,8 @@ class Cred(BaseModel):
     password: str = Field(min_length=6,max_length=200)
 class Recovery(BaseModel):
     recovery_key: str = Field(min_length=32, max_length=256)
-    new_username: str = Field(default="DOC", min_length=3, max_length=60, pattern=r"^[\\w.-]+$")\n    new_password: str = Field(min_length=6, max_length=200)
+    new_username: str = Field(default="DOC", min_length=3, max_length=60, pattern=r"^[\w.-]+$")
+    new_password: str = Field(min_length=6, max_length=200)
 
 class Data(BaseModel):
     data: dict
