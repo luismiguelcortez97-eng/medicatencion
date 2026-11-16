@@ -1,7 +1,9 @@
 services:
   - type: web
-    name: control-financiero-personal
+    name: medicatencion
     runtime: python
+    plan: free
+    region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
@@ -10,6 +12,6 @@ services:
       - key: DATABASE_PATH
         value: /var/data/control_financiero.db
     disk:
-      name: finanzas-data
+      name: medicatencion-data
       mountPath: /var/data
       sizeGB: 1
