@@ -61,6 +61,10 @@ def make_token(u):
 class Cred(BaseModel):
     username: str = Field(min_length=3,max_length=60,pattern=r"^[\w.-]+$")
     password: str = Field(min_length=12,max_length=200)
+class Recovery(BaseModel):
+    recovery_key: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=12, max_length=200)
+
 class Data(BaseModel):
     data: dict
 
@@ -126,6 +130,22 @@ def login(x:Cred):
     if not u or not hmac.compare_digest(hashlib.pbkdf2_hmac("sha256",x.password.encode(),bytes.fromhex(u["salt"]),310000).hex(),u["hash"]):
         raise HTTPException(401,"Usuario o contraseña incorrectos.")
     return {"token":make_token(x.username)}
+@app.post("/api/recover")
+def recover_owner(x:Recovery):
+    recovery_key=os.getenv("OWNER_RECOVERY_KEY")
+    if not recovery_key or len(recovery_key)<32:
+        raise HTTPException(503,"La recuperación no está habilitada.")
+    if not hmac.compare_digest(x.recovery_key,recovery_key):
+        raise HTTPException(403,"Clave de recuperación incorrecta.")
+    salt=secrets.token_hex(16)
+    hashed=hashlib.pbkdf2_hmac("sha256",x.new_password.encode(),bytes.fromhex(salt),310000).hex()
+    with con() as c:
+        c.execute("SELECT id FROM users ORDER BY id LIMIT 1 FOR UPDATE")
+        owner=c.fetchone()
+        if not owner: raise HTTPException(404,"No existe una cuenta propietaria para recuperar.")
+        c.execute("UPDATE users SET salt=%s,hash=%s WHERE id=%s",(salt,hashed,owner["id"]))
+    return {"ok":True,"message":"Contraseña del propietario actualizada. Los registros se conservaron."}
+
 @app.get("/api/data")
 def get_data(user=Depends(auth)):
     with con() as c:
