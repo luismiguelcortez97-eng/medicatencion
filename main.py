@@ -262,6 +262,47 @@ def dashboard(user=Depends(auth)):
         "overdue":total("SELECT COUNT(*) v FROM obligations WHERE paid=0 AND due_date<%s",(date.today().isoformat(),))
         }
 
+@app.get("/api/insights")
+def insights(user=Depends(auth)):
+    today=date.today()
+    start=(today-timedelta(days=90)).isoformat()
+    month=today.strftime("%Y-%m")
+    with con() as c:
+        def total(sql,args=()):
+            c.execute(sql,args)
+            return float(c.fetchone()["v"] or 0)
+        avg_income=total("SELECT COALESCE(SUM(amount),0)/3.0 v FROM movements WHERE ((kind='income' AND scope='personal') OR kind='withdrawal') AND day >= %s",(start,))
+        avg_expense=total("SELECT COALESCE(SUM(amount),0)/3.0 v FROM movements WHERE kind='expense' AND scope='personal' AND day >= %s",(start,))
+        monthly_surplus=avg_income-avg_expense
+        cash=total("SELECT COALESCE(SUM(balance),0) v FROM accounts WHERE scope='personal'")
+        reserve=total("SELECT COALESCE(SUM(balance),0) v FROM accounts WHERE scope='personal' AND is_reserve=TRUE")
+        target_months=total("SELECT emergency_months v FROM financial_settings WHERE id=1")
+        target=avg_expense*int(target_months or 3)
+        c.execute("SELECT creditor,balance,rate,min_payment,due_day FROM debts WHERE scope='personal' AND balance>0 ORDER BY rate DESC,balance DESC")
+        debts=c.fetchall()
+        c.execute("SELECT b.id,b.name,b.category,b.scope,b.monthly_limit,COALESCE(SUM(m.amount),0) spent FROM budgets b LEFT JOIN movements m ON m.scope=b.scope AND m.category=b.category AND m.kind='expense' AND substring(m.day,1,7)=%s GROUP BY b.id ORDER BY b.scope,b.name",(month,))
+        budgets=c.fetchall()
+        gap=max(0,target-reserve)
+        if monthly_surplus>0:
+            if gap>0:
+                allocation={"fondo_emergencia":round(min(monthly_surplus*0.5,gap),2),"deuda_prioritaria":round(monthly_surplus*0.4,2),"margen_libre":round(monthly_surplus*0.1,2)}
+            else:
+                allocation={"fondo_emergencia":0,"deuda_prioritaria":round(monthly_surplus*0.7,2),"ahorro_objetivos":round(monthly_surplus*0.2,2),"margen_libre":round(monthly_surplus*0.1,2)}
+        else:
+            allocation={"fondo_emergencia":0,"deuda_prioritaria":0,"margen_libre":0}
+        projections=[]
+        for months in (3,6,12,24):
+            projections.append({"months":months,"projected_cash":round(cash+monthly_surplus*months,2)})
+        return {
+            "period_days":90,"average_monthly_income":round(avg_income,2),
+            "average_monthly_expense":round(avg_expense,2),"average_monthly_surplus":round(monthly_surplus,2),
+            "emergency_target":round(target,2),"emergency_gap":round(gap,2),
+            "allocation":allocation,"debt_priority":debts,
+            "budgets":[{**b,"spent":float(b["spent"] or 0),"usage_pct":round(float(b["spent"] or 0)/float(b["monthly_limit"])*100,1) if b["monthly_limit"] else 0} for b in budgets],
+            "projections":projections,
+            "projection_note":"Estimación lineal con el promedio de los últimos 90 días; no es una garantía ni incorpora cambios futuros."
+        }
+
 @app.post("/api/travis")
 def travis(x:Data,user=Depends(auth)):
     d=dashboard(user); surplus=d["income"]-d["expense"]; advice=[]
