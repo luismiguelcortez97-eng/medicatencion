@@ -284,9 +284,12 @@ def update_account(account_id:int,x:Data,user=Depends(auth)):
         c.execute("SELECT * FROM accounts WHERE id=%s FOR UPDATE",(account_id,))
         old=c.fetchone()
         if not old: raise HTTPException(404,"Cuenta no encontrada.")
-        # La pertenencia y el saldo no se editan aquí para no alterar movimientos históricos.
-        c.execute("UPDATE accounts SET name=%s,kind=%s,is_reserve=%s WHERE id=%s",
-          (name,kind,bool(d.get("is_reserve",False)),account_id))
+        # El saldo puede corregirse manualmente; los movimientos históricos permanecen intactos.
+        try: balance=float(d.get("balance",old["balance"]))
+        except (TypeError,ValueError): raise HTTPException(422,"El efectivo debe ser una cantidad válida.")
+        if not 0 <= balance <= 1000000000: raise HTTPException(422,"El saldo debe estar entre $0 y $1,000,000,000.")
+        c.execute("UPDATE accounts SET name=%s,kind=%s,is_reserve=%s,balance=%s WHERE id=%s",
+          (name,kind,bool(d.get("is_reserve",False)),balance,account_id))
     return {"ok":True,"id":account_id}
 
 @app.delete("/api/accounts/{account_id}")
