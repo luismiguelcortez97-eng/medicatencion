@@ -389,14 +389,16 @@ def pay_debt(debt_id:int,x:Data,user=Depends(auth)):
         if amount>float(debt["balance"] or 0)+0.005:
             raise HTTPException(422,"El pago no puede superar el saldo pendiente de la deuda.")
         account_id=d.get("account_id")
-        account=get_account(c,account_id,debt["scope"])
-        if debt["scope"]=="business" and account["business_id"]!=debt["business_id"]:
-            raise HTTPException(422,"Selecciona una cuenta del negocio al que pertenece esta deuda.")
-        movement={"kind":"expense","scope":debt["scope"],"amount":amount,"account_id":account_id,"dest_id":None,"business_id":debt["business_id"]}
+        account=get_account(c,account_id)
+        payment_scope=account["scope"]
+        payment_business_id=account["business_id"] if payment_scope=="business" else None
+        movement={"kind":"expense","scope":payment_scope,"amount":amount,"account_id":account_id,"dest_id":None,"business_id":payment_business_id}
         apply_movement(c,movement)
         concept="Pago de deuda: "+str(debt["creditor"])
+        if debt["scope"]!=payment_scope:
+            concept+=" (deuda "+("personal" if debt["scope"]=="personal" else "empresarial")+")"
         c.execute("INSERT INTO movements(kind,scope,concept,amount,day,account_id,dest_id,business_id,category) VALUES('expense',%s,%s,%s,%s,%s,NULL,%s,'Deuda')",
-          (debt["scope"],concept,amount,mx_today().isoformat(),account_id,debt["business_id"]))
+          (payment_scope,concept,amount,mx_today().isoformat(),account_id,payment_business_id))
         new_balance=max(0,round(float(debt["balance"] or 0)-amount,2))
         c.execute("UPDATE debts SET balance=%s,last_paid_on=%s WHERE id=%s",(new_balance,mx_today(),debt_id))
     return {"ok":True,"debt_id":debt_id,"paid":amount,"balance":new_balance}
