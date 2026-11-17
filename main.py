@@ -215,6 +215,33 @@ def add(table:str,x:Data,user=Depends(auth)):
         else: raise HTTPException(404,"Sección inválida.")
         return {"id":c.fetchone()["id"],"ok":True}
 
+@app.put("/api/debts/{debt_id}")
+def update_debt(debt_id:int,x:Data,user=Depends(auth)):
+    d=x.data
+    creditor=str(d.get("creditor") or "").strip()
+    if not creditor: raise HTTPException(422,"Escribe el acreedor.")
+    sc=valid_scope(d.get("scope"))
+    balance=valid_amount(d.get("balance"))
+    try:
+        rate=float(d.get("rate") or 0)
+        minimum=float(d.get("min_payment") or 0)
+        due=int(d["due_day"]) if d.get("due_day") not in (None,"") else None
+    except (TypeError,ValueError):
+        raise HTTPException(422,"Revisa tasa, pago mínimo y día de pago.")
+    if not 0<=rate<=10000 or not 0<=minimum<=1000000000:
+        raise HTTPException(422,"La tasa o el pago mínimo no son válidos.")
+    if due is not None and not 1<=due<=31:
+        raise HTTPException(422,"Día de pago entre 1 y 31.")
+    bid=d.get("business_id") if sc=="business" else None
+    with con() as c:
+        if sc=="business":
+            c.execute("SELECT id FROM businesses WHERE id=%s",(bid,))
+            if not c.fetchone(): raise HTTPException(422,"Selecciona un negocio válido.")
+        c.execute("UPDATE debts SET creditor=%s,scope=%s,business_id=%s,balance=%s,rate=%s,min_payment=%s,due_day=%s WHERE id=%s RETURNING id",
+            (creditor,sc,bid,balance,rate,minimum,due,debt_id))
+        if not c.fetchone(): raise HTTPException(404,"No se encontró esa deuda.")
+    return {"ok":True,"id":debt_id}
+
 @app.post("/api/settings/emergency-fund")
 def update_emergency_settings(x:Data,user=Depends(auth)):
     try: months=int(x.data.get("target_months",3))
