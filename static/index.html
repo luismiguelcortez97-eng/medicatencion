@@ -113,6 +113,39 @@ input[type="date"],input[type="time"]{-webkit-appearance:none;appearance:none;mi
  .nav{transform:translateZ(0);-webkit-transform:translateZ(0)}
  .tablewrap{transform:translateZ(0);-webkit-transform:translateZ(0)}
 }
+
+/* En iPhone, priorizar el diseño táctil aunque Safari cambie el ancho CSS */
+@media (hover:none) and (pointer:coarse){
+ html,body{width:100%;max-width:100%;overflow-x:hidden}
+ .wrap{width:100%;max-width:100%;padding:12px;padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+ .topbar{align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+ .brandtitle{flex:1;min-width:0}
+ .topactions{width:100%;display:flex;flex-direction:row;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px}
+ .topactions>.pill{display:none}
+ .topactions button{min-height:44px;padding:9px 11px}
+ .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+ .two{grid-template-columns:minmax(0,1fr)}
+ .card,.formgrid,.sectionhead{min-width:0}
+ .formgrid{grid-template-columns:minmax(0,1fr)}
+ .formgrid .wide{grid-column:auto}
+ .travisbox{grid-template-columns:minmax(0,1fr);text-align:center}
+ .dog{height:130px}
+ .travisinput{flex-direction:column}
+ .nav{position:sticky;top:0;z-index:18;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;margin-left:-2px;margin-right:-2px}
+ .nav::-webkit-scrollbar{display:none}
+ .nav button{min-height:44px;flex:0 0 auto}
+ .tablewrap{display:block;width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+ .tablewrap table{width:max-content;min-width:590px;max-width:none}
+ .notification-panel{position:fixed;top:calc(env(safe-area-inset-top) + 12px);right:12px;width:min(390px,calc(100vw - 24px));max-height:calc(100dvh - 30px - env(safe-area-inset-bottom))}
+ .travis-dock{right:8px;bottom:calc(8px + env(safe-area-inset-bottom));left:auto;width:calc(100vw - 16px);max-width:430px;max-height:calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom))}
+ .travis-dock[style*="left"]{right:auto;max-width:calc(100vw - 16px)}
+ .travis-dock.open{display:flex;flex-direction:column;overflow:auto}
+ .travis-dock-body{min-height:0;padding:10px}
+ .travis-chat-messages{height:min(250px,32dvh);min-height:120px}
+ .travis-compose textarea{font-size:16px;min-height:46px}
+ .travis-compose button,.actions button{min-height:46px}
+ .toast{left:12px;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));width:auto;max-width:none;text-align:center}
+}
 </style></head>
 <body><main class="wrap">
 <div id="auth" class="card auth"><div class="brand"><div class="eyebrow">Control inteligente</div><h1 style="margin-top:10px">Finanzas <span style="color:var(--gold)">·</span> Travis</h1><p style="color:#cbd7e3;margin:0">Tus decisiones, respaldadas por tus números.</p></div><div id="loginPane"><h2>Iniciar sesión</h2><div class="field"><label>USUARIO</label><input id="user" autocomplete="username" minlength="3" maxlength="60" placeholder="Mínimo 3 caracteres"></div><div class="field"><label>CONTRASEÑA</label><input id="pass" type="password" autocomplete="current-password" minlength="6" maxlength="200" placeholder="123456"></div><button style="width:100%" onclick="login()">Entrar</button><p class="muted small" id="authmsg" style="margin-top:12px"></p><p class="small muted">¿Primera vez? <a href="#" onclick="toggleRegister();return false">Crear cuenta propietaria</a></p></div><div id="registerPane" class="hidden"><h2>Crear usuario propietario</h2><div class="field"><label>USUARIO</label><input id="newuser" autocomplete="username" minlength="3" maxlength="60" placeholder="Mínimo 3 caracteres"></div><div class="field"><label>CONTRASEÑA SEGURA</label><input id="newpass" type="password" autocomplete="new-password" minlength="6" maxlength="200" placeholder="Mínimo 6 caracteres"></div><button style="width:100%" onclick="register()">Crear acceso</button><p class="small muted" id="regmsg"></p><p class="small"><a href="#" onclick="toggleRegister();return false">Volver a iniciar sesión</a></p></div></div>
