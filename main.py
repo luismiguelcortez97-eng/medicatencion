@@ -47,6 +47,7 @@ def init_db():
     """ALTER TABLE debts ADD COLUMN IF NOT EXISTS due_type TEXT NOT NULL DEFAULT 'monthly_day'""",
     """ALTER TABLE debts ADD COLUMN IF NOT EXISTS due_date DATE""",
     """ALTER TABLE debts ADD COLUMN IF NOT EXISTS weekly_day INTEGER""",
+    """ALTER TABLE debts ADD COLUMN IF NOT EXISTS last_paid_on DATE""",
     """ALTER TABLE obligations ADD COLUMN IF NOT EXISTS frequency TEXT NOT NULL DEFAULT 'once'"""
     ]
     with con() as c:
@@ -377,6 +378,29 @@ def update_debt(debt_id:int,x:Data,user=Depends(auth)):
         if not c.fetchone(): raise HTTPException(404,"No se encontró esa deuda.")
     return {"ok":True,"id":debt_id}
 
+@app.post("/api/debts/{debt_id}/paid")
+def pay_debt(debt_id:int,x:Data,user=Depends(auth)):
+    d=x.data
+    with con() as c:
+        c.execute("SELECT * FROM debts WHERE id=%s FOR UPDATE",(debt_id,))
+        debt=c.fetchone()
+        if not debt: raise HTTPException(404,"Deuda no encontrada.")
+        amount=valid_amount(d.get("amount") if d.get("amount") is not None else debt["min_payment"])
+        if amount>float(debt["balance"] or 0)+0.005:
+            raise HTTPException(422,"El pago no puede superar el saldo pendiente de la deuda.")
+        account_id=d.get("account_id")
+        account=get_account(c,account_id,debt["scope"])
+        if debt["scope"]=="business" and account["business_id"]!=debt["business_id"]:
+            raise HTTPException(422,"Selecciona una cuenta del negocio al que pertenece esta deuda.")
+        movement={"kind":"expense","scope":debt["scope"],"amount":amount,"account_id":account_id,"dest_id":None,"business_id":debt["business_id"]}
+        apply_movement(c,movement)
+        concept="Pago de deuda: "+str(debt["creditor"])
+        c.execute("INSERT INTO movements(kind,scope,concept,amount,day,account_id,dest_id,business_id,category) VALUES('expense',%s,%s,%s,%s,%s,NULL,%s,'Deuda')",
+          (debt["scope"],concept,amount,mx_today().isoformat(),account_id,debt["business_id"]))
+        new_balance=max(0,round(float(debt["balance"] or 0)-amount,2))
+        c.execute("UPDATE debts SET balance=%s,last_paid_on=%s WHERE id=%s",(new_balance,mx_today(),debt_id))
+    return {"ok":True,"debt_id":debt_id,"paid":amount,"balance":new_balance}
+
 @app.post("/api/settings/emergency-fund")
 def update_emergency_settings(x:Data,user=Depends(auth)):
     try: months=int(x.data.get("target_months",3))
@@ -483,16 +507,23 @@ def insights(user=Depends(auth)):
 
 def _next_debt_due(row, today):
     kind=row.get("due_type") or "monthly_day"
+    last_paid=None
+    if row.get("last_paid_on"):
+        try: last_paid=date.fromisoformat(str(row["last_paid_on"])[:10])
+        except Exception: last_paid=None
     if kind=="date" and row.get("due_date"):
         due=date.fromisoformat(str(row["due_date"])[:10])
-        return due
+        return None if last_paid and last_paid>=due else due
     if kind=="weekly" and row.get("weekly_day") is not None:
         target=int(row["weekly_day"])
-        return today+timedelta(days=(target-today.weekday())%7)
+        candidate=today+timedelta(days=(target-today.weekday())%7)
+        if last_paid and candidate<=last_paid:
+            candidate+=timedelta(days=7)
+        return candidate
     if row.get("due_day"):
         day=int(row["due_day"])
         candidate=date(today.year,today.month,min(day,calendar.monthrange(today.year,today.month)[1]))
-        if candidate<today:
+        if candidate<today or (last_paid and candidate<=last_paid):
             if today.month==12: year,month=today.year+1,1
             else: year,month=today.year,today.month+1
             candidate=date(year,month,min(day,calendar.monthrange(year,month)[1]))
@@ -509,7 +540,7 @@ def decision_plan(user=Depends(auth)):
         accounts=c.fetchall()
         c.execute("SELECT id,name,scope,amount,due_date,frequency,paid FROM obligations WHERE paid=0 ORDER BY due_date")
         obligations=c.fetchall()
-        c.execute("SELECT id,creditor,scope,business_id,balance,rate,min_payment,due_type,due_date,weekly_day,due_day FROM debts WHERE balance>0 ORDER BY rate DESC")
+        c.execute("SELECT id,creditor,scope,business_id,balance,rate,min_payment,due_type,due_date,weekly_day,due_day,last_paid_on FROM debts WHERE balance>0 ORDER BY rate DESC")
         debts=c.fetchall()
         c.execute("SELECT id,name FROM businesses ORDER BY name")
         businesses=c.fetchall()
