@@ -307,8 +307,17 @@ def insights(user=Depends(auth)):
 
 @app.post("/api/travis")
 def travis(x:Data,user=Depends(auth)):
-    question=str(x.data.get("question") or "").strip()[:1200]
+    question=str(x.data.get("question") or "").strip()[:3000]
     page=str(x.data.get("context") or "general")[:80]
+    raw_history=x.data.get("history") or []
+    history=[]
+    if isinstance(raw_history,list):
+        for item in raw_history[-12:]:
+            if not isinstance(item,dict): continue
+            role=item.get("role")
+            content=str(item.get("content") or "").strip()[:3000]
+            if role in ("user","assistant") and content:
+                history.append({"role":role,"content":content})
     d=dashboard(user)
     ins=insights(user)
     snapshot={
@@ -336,7 +345,11 @@ def travis(x:Data,user=Depends(auth)):
     key=os.getenv("GROQ_API_KEY")
     if key:
         model=os.getenv("GROQ_MODEL","openai/gpt-oss-120b")
-        system=("Eres Travis, un asistente de inteligencia artificial general, conversacional y multidisciplinario integrado en la aplicación Finanzas. "
+        system=("Eres Travis, la IA personal del usuario dentro de Finanzas con Travis. Tu identidad es Travis. "
+        "Habla como un asistente conversacional real, cálido, atento, natural y espontáneo, no como un formulario, buscador ni generador automático de reportes. "
+        "Entiende el contexto y continúa la conversación usando los mensajes anteriores que recibes. Si el usuario te saluda, te presenta, te agradece, bromea o comenta algo personal, responde a ese acto conversacional directamente y con naturalidad; no conviertas todo en una consulta financiera. "
+        "Por ejemplo, si dice 'Travis, te acabo de crear', responde agradeciendo la bienvenida, preséntate brevemente y dile que estás listo para ayudarle. No respondas con instrucciones técnicas ni con un análisis de sus finanzas salvo que te lo pida. "
+        "No digas que careces de memoria cuando el historial de esta conversación está incluido. No inventes recuerdos que no aparezcan en el historial. "
         "Tu alcance no se limita a las finanzas: responde preguntas de ciencia, historia, cultura, tecnología, medicina general, programación, educación, negocios, matemáticas, idiomas y temas cotidianos. "
         "Contesta directamente y con profundidad proporcional a la pregunta. Explica conceptos desde cero cuando sea necesario, da ejemplos prácticos y adapta el nivel al usuario. "
         "No afirmes saberlo todo ni inventes datos. Si no tienes certeza, dilo claramente, distingue hechos de hipótesis y señala qué información falta. No inventes fuentes, citas, cifras, tasas, fechas ni capacidades. "
@@ -349,10 +362,11 @@ def travis(x:Data,user=Depends(auth)):
         "No ordenes ni afirmes ejecutar pagos, transferencias o movimientos. No inventes tasas, CAT, fechas ni saldos. Considera liquidez, obligaciones vencidas, pagos mínimos, fondo de emergencia y riesgo. Explica supuestos y advierte cuando la muestra de 90 días sea insuficiente. "
         "No fuerces una respuesta financiera si la pregunta trata de otro tema. Para preguntas generales, responde como asistente general y no recites el estado financiero del usuario si no es pertinente. "
         "Estructura respuestas complejas con: respuesta o diagnóstico; explicación; pasos accionables; incertidumbres o datos faltantes. Mantén un tono claro, respetuoso, natural y útil.")
-        payload={"model":model,"messages":[{"role":"system","content":system},
-        {"role":"user","content":"Pestaña actual: "+page+"\\nPregunta: "+(question or "Analiza mi situación y dime las tres prioridades.")+
-        "\\nDatos registrados (JSON): "+json.dumps(snapshot,ensure_ascii=False,default=str)}],
-        "temperature":0.25,"max_tokens":1300}
+        messages=[{"role":"system","content":system},
+        {"role":"system","content":"Contexto de la aplicación y datos financieros actuales (MXN). Úsalos solo si son pertinentes a la conversación; nunca los recites espontáneamente: "+json.dumps({"pestana_actual":page,"datos":snapshot},ensure_ascii=False,default=str)}]
+        messages.extend(history)
+        messages.append({"role":"user","content":question or "Analiza mi situación y dime las tres prioridades."})
+        payload={"model":model,"messages":messages,"temperature":0.55,"max_tokens":1600}
         try:
             req=urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",
                 data=json.dumps(payload).encode("utf-8"),
