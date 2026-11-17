@@ -26,7 +26,7 @@
 @media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two{grid-template-columns:1fr}.wrap{padding:16px}.travisbox{grid-template-columns:110px 1fr}.dog{transform:scale(.78);transform-origin:center}}
 @media(max-width:560px){.wrap{padding:12px}.topbar{align-items:flex-start}.topactions{flex-direction:column;align-items:stretch}.grid{gap:8px}.metric{font-size:21px}.card{padding:14px}.formgrid{grid-template-columns:1fr}.formgrid .wide{grid-column:auto}.travisbox{grid-template-columns:1fr;text-align:center}.dog{height:130px}.travisinput{flex-direction:column}.nav{margin-left:-2px;margin-right:-2px}}
 
-.dog3d{width:190px;height:190px;position:relative;margin:auto;perspective:700px;transform-style:preserve-3d;animation:travisFloat 4s ease-in-out infinite}
+.dog3d{width:190px;height:190px;position:relative;margin:auto;overflow:hidden;border-radius:22px;animation:travisFloat 4s ease-in-out infinite;background:transparent}.dog3d img{width:100%;height:100%;object-fit:contain;display:block}
 .dog-shadow{position:absolute;left:34px;bottom:8px;width:125px;height:20px;border-radius:50%;background:#0005;filter:blur(8px);transform:rotateX(65deg)}
 .dog-body{position:absolute;left:50px;top:111px;width:100px;height:65px;border-radius:48%;background:linear-gradient(115deg,#f1eee7 0 22%,#647487 24% 68%,#263b53 70%);box-shadow:inset -12px -10px 16px #07182c88,inset 8px 5px 12px #fff9}
 .dog-neck{position:absolute;left:68px;top:87px;width:66px;height:65px;border-radius:45%;background:linear-gradient(90deg,#f5f1e8 0 28%,#68788b 30% 70%,#243b54 72%);box-shadow:inset -8px -5px 10px #15243877}
@@ -44,7 +44,7 @@
 @keyframes travisFloat{0%,100%{transform:translateY(0) rotateY(-4deg)}50%{transform:translateY(-6px) rotateY(5deg)}}
 @keyframes travisLook{0%,35%,100%{transform:rotateY(-8deg) rotateX(3deg)}48%,65%{transform:rotateY(8deg) rotateX(1deg)}}
 .travis-dock{position:fixed;right:20px;bottom:18px;width:min(360px,calc(100vw - 28px));z-index:30;background:var(--panel,#fff);border:1px solid var(--line);border-radius:17px;box-shadow:0 15px 45px #07182c33;overflow:hidden}
-.travis-dock-head{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:linear-gradient(120deg,#101e32,#294867);color:white} .travis-dock-head .dock-dog{width:56px;height:56px;min-width:56px;margin:0;perspective:500px;animation:none}.travis-dock-head .dock-dog canvas{width:56px!important;height:56px!important}
+.travis-dock-head{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:linear-gradient(120deg,#101e32,#294867);color:white} .travis-dock-head .dock-dog{width:56px;height:56px;min-width:56px;margin:0;perspective:none;animation:none;overflow:hidden;border-radius:50%;background:#182b42}.travis-dock-head .dock-dog img{width:100%;height:100%;object-fit:cover;object-position:center 20%}
 .travis-dock-body{padding:12px;display:none}.travis-dock.open .travis-dock-body{display:block}
 .travis-dock textarea{width:100%;min-height:66px;resize:vertical}.travis-dock-answer{max-height:230px;overflow:auto;white-space:pre-wrap;font-size:12px;line-height:1.55;margin-top:10px}
 .travis-dock-actions{display:flex;gap:7px;margin-top:8px}.travis-dock-actions button{flex:1}
@@ -73,66 +73,10 @@
 <section id="distribucion" class="view"><div class="card"><div class="eyebrow">Decisiones con reglas transparentes</div><h2>Distribución inteligente del excedente</h2><p class="muted">Estimación basada en tu flujo personal promedio de los últimos 90 días. No mezcla caja empresarial.</p><div class="grid"><div class="card metric-card"><div class="metric-label">Ingreso mensual promedio</div><div class="metric" id="distIncome">$0</div></div><div class="card metric-card"><div class="metric-label">Gasto mensual promedio</div><div class="metric" id="distExpense">$0</div></div><div class="card metric-card"><div class="metric-label">Excedente estimado</div><div class="metric" id="distSurplus">$0</div></div></div><div id="allocation" class="tablewrap"></div><h3>Orden sugerido de deudas</h3><div id="debtPriority" class="tablewrap"></div><p class="muted small">Primero cubre gastos esenciales y pagos mínimos. El orden por tasa no sustituye revisar CAT, penalizaciones, tasa variable ni condiciones contractuales.</p></div><div class="card"><h2>Control de presupuestos</h2><div id="budgetInsights" class="tablewrap"></div></div></section>
 <section id="proyeccion" class="view"><div class="card"><div class="eyebrow">Escenario, no promesa</div><h2>Proyección de efectivo personal</h2><p class="muted" id="projectionNote"></p><div id="projectionRows" class="tablewrap"></div></div></section>
 <section id="reportes" class="view"><div class="card"><div class="eyebrow">Tus datos, fuera del sistema</div><h2>Exportar información</h2><p class="muted">Descarga los registros para revisarlos en una hoja de cálculo.</p><div class="actions"><button onclick="exportExcel()">Descargar Excel completo</button><button class="secondary" onclick="exportPDF()">Descargar reporte PDF</button><button class="secondary" onclick="exportCSV()">Movimientos CSV</button><button class="secondary" onclick="exportBackup()">Respaldo JSON</button></div><p class="muted small">El CSV contiene movimientos. El respaldo JSON contiene todos los registros disponibles.</p></div></section>
-<section id="travis" class="view"><div class="travisbox"><div class="dog3d" id="travis3d" role="img" aria-label="Travis, husky con volumen y movimiento"><div class="dog-shadow"></div><div class="dog-body"></div><div class="dog-neck"></div><div class="dog-head"><div class="dog-ear left"></div><div class="dog-ear right"></div><div class="dog-mask"></div><div class="dog-eye left"></div><div class="dog-eye right"></div><div class="dog-cheek left"></div><div class="dog-cheek right"></div><div class="dog-muzzle"></div><div class="dog-nose"></div><div class="dog-mouth"></div></div></div><div class="travistext"><div class="eyebrow">Tu copiloto financiero</div><h2>Hola, soy Travis.</h2><p>Voy a revisar tus cifras, separar tus cajas y señalar qué decisión protege mejor tu liquidez. No invento datos ni ejecuto movimientos.</p></div></div><div class="card" style="margin-top:14px"><h2>Consulta financiera</h2><div class="travisinput"><input id="question" placeholder="Ej. ¿Qué deuda debería priorizar?"><button class="gold" onclick="ask()">Consultar</button></div><div id="answer" class="answer hidden"></div><p class="muted small" style="margin:12px 0 0">Travis te guía para usar cada módulo y analiza tus registros. Para respuestas generativas avanzadas se requiere configurar OPENAI_API_KEY en Render; sin ella funciona el motor financiero de reglas. El personaje 3D requiere WebGL y que Three.js pueda cargarse.</p></div></section>
-</div></main><div id="travisDock" class="travis-dock hidden"><div class="travis-dock-head"><div class="dog3d dock-dog" id="travisDock3d" role="img" aria-label="Travis, husky pastor alemán 3D"></div><div><strong>Travis</strong><div style="font-size:10px;opacity:.82">Guía y asesor financiero</div></div><button class="secondary" style="padding:5px 10px" onclick="toggleTravisDock()">Abrir / cerrar</button></div><div class="travis-dock-body"><div class="muted small" id="travisContext">Analizando la pestaña actual</div><textarea id="dockQuestion" placeholder="Pregúntame qué decisión financiera tomar..."></textarea><div class="travis-dock-actions"><button onclick="askDock()">Consultar</button></div><div id="dockAnswer" class="travis-dock-answer"></div></div></div><div id="toast" class="toast hidden"></div>
+<section id="travis" class="view"><div class="travisbox"><div class="dog3d" id="travis3d" role="img" aria-label="Travis, perro realista cruza de husky con pastor alemán"><img src="/static/travis.webp" alt="Travis, cruza de husky con pastor alemán"></div><div class="travistext"><div class="eyebrow">Tu copiloto financiero</div><h2>Hola, soy Travis.</h2><p>Voy a revisar tus cifras, separar tus cajas y señalar qué decisión protege mejor tu liquidez. No invento datos ni ejecuto movimientos.</p></div></div><div class="card" style="margin-top:14px"><h2>Consulta financiera</h2><div class="travisinput"><input id="question" placeholder="Ej. ¿Qué deuda debería priorizar?"><button class="gold" onclick="ask()">Consultar</button></div><div id="answer" class="answer hidden"></div><p class="muted small" style="margin:12px 0 0">Travis te guía para usar cada módulo y analiza tus registros. Para respuestas generativas avanzadas se requiere configurar OPENAI_API_KEY en Render; sin ella funciona el motor financiero de reglas. El personaje 3D requiere WebGL y que Three.js pueda cargarse.</p></div></section>
+</div></main><div id="travisDock" class="travis-dock hidden"><div class="travis-dock-head"><div class="dog3d dock-dog" id="travisDock3d" role="img" aria-label="Travis, perro cruza de husky con pastor alemán"><img src="/static/travis.webp" alt="Travis"></div><div><strong>Travis</strong><div style="font-size:10px;opacity:.82">Guía y asesor financiero</div></div><button class="secondary" style="padding:5px 10px" onclick="toggleTravisDock()">Abrir / cerrar</button></div><div class="travis-dock-body"><div class="muted small" id="travisContext">Analizando la pestaña actual</div><textarea id="dockQuestion" placeholder="Pregúntame qué decisión financiera tomar..."></textarea><div class="travis-dock-actions"><button onclick="askDock()">Consultar</button></div><div id="dockAnswer" class="travis-dock-answer"></div></div></div><div id="toast" class="toast hidden"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script>
-(function(){function buildTravis(hostId){
- const host=document.getElementById(hostId);if(!host||!window.THREE||host.dataset.ready)return;host.dataset.ready='1';
- host.querySelectorAll('.dog-shadow,.dog-body,.dog-neck,.dog-head').forEach(n=>n.style.display='none');
- const T=window.THREE,small=hostId==='travisDock3d';
- const scene=new T.Scene(),camera=new T.PerspectiveCamera(32,1,.1,100);camera.position.set(0,1.0,small?8.6:6.3);
- const renderer=new T.WebGLRenderer({alpha:true,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setClearColor(0,0);
- host.appendChild(renderer.domElement);renderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%';
- scene.add(new T.HemisphereLight(0xffffff,0x29384d,2.2));const key=new T.DirectionalLight(0xffffff,2.6);key.position.set(-3,5,5);scene.add(key);
- const fill=new T.DirectionalLight(0xb9d9ff,1.15);fill.position.set(4,2,-3);scene.add(fill);
- const mat=(c,r=.72)=>new T.MeshStandardMaterial({color:c,roughness:r});
- const sable=mat(0xb77a43),tan=mat(0xd39a61),cream=mat(0xf0e8d9),white=mat(0xfaf8f1),black=mat(0x202a34,.35),mask=mat(0x293746),grey=mat(0x64788c),inner=mat(0x9c7770),eye=mat(0x9a7845,.3),nose=mat(0x111820,.25);
- const dog=new T.Group();scene.add(dog);
- function ball(p,x,y,z,sx,sy,sz,m){const o=new T.Mesh(new T.SphereGeometry(1,32,24),m);o.position.set(x,y,z);o.scale.set(sx,sy,sz);p.add(o);return o}
- function cone(p,x,y,z,r,h,m,rz=0){const o=new T.Mesh(new T.ConeGeometry(r,h,32),m);o.position.set(x,y,z);o.rotation.z=rz;p.add(o);return o}
- // Cuerpo robusto y pecho amplio, con manto oscuro típico del pastor alemán.
- ball(dog,0,-.53,-.12,.82,.58,.53,sable);
- ball(dog,0,-.39,.18,.49,.62,.31,cream);
- ball(dog,0,-.18,-.30,.72,.40,.39,mask);
- // Patas delanteras y traseras visibles.
- for(const x of [-.48,.48]){
-  ball(dog,x,-.91,.12,.19,.42,.20,tan);
-  ball(dog,x,-1.18,.20,.20,.13,.25,cream);
-  ball(dog,x*.78,-.84,-.43,.20,.43,.20,sable);
- }
- // Cuello claro con sombreado oscuro en la nuca.
- ball(dog,0,-.24,.30,.48,.62,.34,tan);
- ball(dog,0,-.05,.05,.39,.52,.28,mask);
- const head=new T.Group();head.position.set(0,.30,.30);dog.add(head);
- // Cráneo y máscara facial que mezcla rasgos de husky y pastor alemán.
- ball(head,0,.12,0,.63,.70,.53,sable);
- ball(head,0,.43,-.015,.48,.37,.48,mask);
- ball(head,0,.10,.39,.34,.49,.18,cream);
- // Orejas grandes, altas y erguidas, con interior cálido.
- cone(head,-.43,.78,-.03,.255,.82,mask,-.20);cone(head,.43,.78,-.03,.255,.82,mask,.20);
- cone(head,-.43,.79,.105,.145,.59,inner,-.20);cone(head,.43,.79,.105,.145,.59,inner,.20);
- // Mejillas blancas del husky y cejas oscuras.
- ball(head,-.29,-.02,.42,.23,.20,.16,white);ball(head,.29,-.02,.42,.23,.20,.16,white);
- ball(head,-.235,.22,.48,.20,.115,.10,mask);ball(head,.235,.22,.48,.20,.115,.10,mask);
- // Ojos ámbar, expresivos y atentos.
- ball(head,-.235,.17,.555,.075,.078,.035,eye);ball(head,.235,.17,.555,.075,.078,.035,eye);
- ball(head,-.235,.17,.584,.032,.052,.018,nose);ball(head,.235,.17,.584,.032,.052,.018,nose);
- ball(head,-.25,.20,.602,.018,.02,.012,white);ball(head,.22,.20,.602,.018,.02,.012,white);
- // Hocico más largo y afinado, propio del pastor alemán, con máscara blanca husky.
- ball(head,0,-.13,.60,.245,.17,.29,cream);
- ball(head,0,-.075,.83,.135,.09,.10,nose);
- ball(head,0,-.27,.68,.025,.09,.018,mask);
- // Cola tupida.
- const tail=ball(dog,.76,-.38,-.45,.16,.48,.18,mask);tail.rotation.z=-.72;
- ball(dog,.88,-.67,-.39,.18,.22,.19,cream);
- function resize(){const w=Math.max(host.clientWidth,small?56:130),h=Math.max(host.clientHeight,small?56:130);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
- resize();if(window.ResizeObserver)new ResizeObserver(resize).observe(host);const clock=new T.Clock();
- function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();dog.position.y=Math.sin(t*1.5)*.028;head.rotation.y=Math.sin(t*.75)*.10;head.rotation.x=Math.sin(t*.6)*.018;tail.rotation.z=-.72+Math.sin(t*2)*.12;renderer.render(scene,camera)}animate();
- }
- const start=()=>{buildTravis('travis3d');buildTravis('travisDock3d')};
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
-})();</script>
+
 <script>
 let token=localStorage.getItem('cf_token'),DATA={businesses:[],accounts:[],movements:[],debts:[],obligations:[],budgets:[]};
 const $=id=>document.getElementById(id),v=id=>$(id)?.value??'',num=id=>v(id)===''?null:Number(v(id)),money=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(Number(n)||0),esc=s=>String(s??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
