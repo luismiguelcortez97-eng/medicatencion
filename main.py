@@ -381,6 +381,91 @@ def insights(user=Depends(auth)):
             "projection_note":"Estimación lineal con el promedio de los últimos 90 días; no es una garantía ni incorpora cambios futuros."
         }
 
+
+def _next_debt_due(row, today):
+    kind=row.get("due_type") or "monthly_day"
+    if kind=="date" and row.get("due_date"):
+        due=date.fromisoformat(str(row["due_date"])[:10])
+        return due
+    if kind=="weekly" and row.get("weekly_day") is not None:
+        target=int(row["weekly_day"])
+        return today+timedelta(days=(target-today.weekday())%7)
+    if row.get("due_day"):
+        day=int(row["due_day"])
+        candidate=date(today.year,today.month,min(day,calendar.monthrange(today.year,today.month)[1]))
+        if candidate<today:
+            if today.month==12: year,month=today.year+1,1
+            else: year,month=today.year,today.month+1
+            candidate=date(year,month,min(day,calendar.monthrange(year,month)[1]))
+        return candidate
+    return None
+
+@app.get("/api/decision-plan")
+def decision_plan(user=Depends(auth)):
+    today=date.today()
+    horizon7=today+timedelta(days=7)
+    horizon30=today+timedelta(days=30)
+    with con() as c:
+        c.execute("SELECT id,name,scope,business_id,balance,is_reserve FROM accounts ORDER BY scope,id")
+        accounts=c.fetchall()
+        c.execute("SELECT id,name,scope,amount,due_date,frequency,paid FROM obligations WHERE paid=0 ORDER BY due_date")
+        obligations=c.fetchall()
+        c.execute("SELECT id,creditor,scope,business_id,balance,rate,min_payment,due_type,due_date,weekly_day,due_day FROM debts WHERE balance>0 ORDER BY rate DESC")
+        debts=c.fetchall()
+        c.execute("SELECT id,name FROM businesses ORDER BY name")
+        businesses=c.fetchall()
+        c.execute("SELECT kind,scope,amount,day,business_id,category FROM movements WHERE day >= %s AND kind IN ('income','expense')",( (today-timedelta(days=90)).isoformat(), ))
+        movements=c.fetchall()
+    cash_personal=sum(float(a["balance"] or 0) for a in accounts if a["scope"]=="personal" and not a["is_reserve"])
+    reserve=sum(float(a["balance"] or 0) for a in accounts if a["scope"]=="personal" and a["is_reserve"])
+    cash_business={}
+    for b in businesses:
+        cash_business[b["id"]]=sum(float(a["balance"] or 0) for a in accounts if a["scope"]=="business" and a["business_id"]==b["id"])
+    due_items=[]
+    for o in obligations:
+        try: due=date.fromisoformat(str(o["due_date"])[:10])
+        except Exception: continue
+        due_items.append({"type":"obligation","name":o["name"],"scope":o["scope"],"amount":float(o["amount"] or 0),"due":due.isoformat(),"days":(due-today).days,"business_id":None})
+    for d in debts:
+        due=_next_debt_due(d,today)
+        if due:
+            due_items.append({"type":"debt_minimum","name":d["creditor"],"scope":d["scope"],"amount":float(d["min_payment"] or 0),"due":due.isoformat(),"days":(due-today).days,"rate":float(d["rate"] or 0),"balance":float(d["balance"] or 0),"business_id":d["business_id"]})
+    due7=[x for x in due_items if x["days"]<=7]
+    due30=[x for x in due_items if x["days"]<=30]
+    def totals(items,scope):
+        return round(sum(x["amount"] for x in items if x["scope"]==scope),2)
+    personal_due7=totals(due7,"personal")
+    personal_due30=totals(due30,"personal")
+    personal_free7=round(cash_personal-personal_due7,2)
+    priorities=[]
+    for item in sorted(due_items,key=lambda x:(x["days"],0 if x["type"]=="obligation" else 1,-x.get("rate",0))):
+        if item["days"]<0: label="VENCIDO"
+        elif item["days"]<=7: label="EN LOS PRÓXIMOS 7 DÍAS"
+        elif item["days"]<=30: label="EN LOS PRÓXIMOS 30 DÍAS"
+        else: continue
+        priorities.append({**item,"status":label})
+    by_business=[]
+    for b in businesses:
+        inc=sum(float(m["amount"] or 0) for m in movements if m["business_id"]==b["id"] and m["kind"]=="income")
+        exp=sum(float(m["amount"] or 0) for m in movements if m["business_id"]==b["id"] and m["kind"]=="expense")
+        by_business.append({"name":b["name"],"income_90d":round(inc,2),"expense_90d":round(exp,2),"operating_difference_90d":round(inc-exp,2),"cash":round(cash_business.get(b["id"],0),2)})
+    expense_categories={}
+    for m in movements:
+        if m["kind"]=="expense":
+            key=("Personal" if m["scope"]=="personal" else "Negocio")+" · "+str(m["category"] or "General")
+            expense_categories[key]=expense_categories.get(key,0)+float(m["amount"] or 0)
+    top_costs=sorted([{"category":k,"amount_90d":round(v,2)} for k,v in expense_categories.items()],key=lambda x:x["amount_90d"],reverse=True)[:8]
+    movement_days=len(set(str(m["day"])[:10] for m in movements))
+    if personal_free7<0:
+        next_action="Tu efectivo personal no alcanza para cubrir todos los compromisos de los próximos 7 días. No adelantes deudas: prioriza vencidos y esenciales, confirma fechas y negocia antes del vencimiento."
+    elif priorities:
+        next_action="Aparta primero los compromisos personales que vencen en los próximos 7 días. Después cubre los mínimos de deuda; solo considera abonos extra con el sobrante confirmado."
+    elif personal_free7>0:
+        next_action="No aparecen compromisos personales registrados para los próximos 7 días. Conserva liquidez y revisa pagos de los siguientes 30 días antes de acelerar deudas."
+    else:
+        next_action="Registra fechas y pagos mínimos de tus deudas y obligaciones para calcular qué dinero está realmente libre."
+    return {"as_of":today.isoformat(),"personal_cash_nonreserve":round(cash_personal,2),"personal_reserve":round(reserve,2),"personal_due_7d":personal_due7,"personal_due_30d":personal_due30,"personal_free_after_7d":personal_free7,"priorities":priorities[:20],"businesses":by_business,"largest_expense_categories_90d":top_costs,"movement_days_90d":movement_days,"has_90d_data":bool(movements),"next_action":next_action,"caveat":"El cálculo incluye obligaciones y pagos mínimos registrados; no reserva gastos esenciales no capturados ni sustituye revisar estados de cuenta. No dupliques una misma deuda como obligación."}
+
 @app.post("/api/travis")
 def travis(x:Data,user=Depends(auth)):
     question=str(x.data.get("question") or "").strip()[:3000]
@@ -421,7 +506,9 @@ def travis(x:Data,user=Depends(auth)):
         "activos_registrados":registered_assets,
         "cantidad_movimientos_registrados":movement_count
     }
+    plan=decision_plan(user)
     snapshot={
+        "plan_de_accion_financiero":plan,
         "estado_real_de_registros":records,
         "moneda":"MXN",
         "efectivo_personal":d["cash"],
@@ -462,7 +549,7 @@ def travis(x:Data,user=Depends(auth)):
         "En cada paso indica claramente: 1) en qué apartado debe entrar, 2) qué acción debe realizar, 3) qué dato debe escribir o seleccionar, 4) cómo saber que terminó correctamente y 5) por qué ese paso es necesario. Usa frases cortas y lenguaje sencillo, sin asumir que el usuario conoce el programa. Si falta un dato, explica cómo obtenerlo o permite dejarlo pendiente si es seguro. "
         "REGLA PRIORITARIA DE PROGRESO: antes de recomendar o preguntar por cualquier paso de configuración, revisa siempre estado_real_de_registros dentro del contexto de la aplicación. Ese inventario proviene directamente de la base de datos y es la fuente de verdad. Si negocios_registrados contiene uno o más elementos, nunca preguntes si ya registró sus negocios ni le indiques registrarlos otra vez; reconoce los nombres existentes y continúa con el primer módulo posterior que realmente falte. Aplica lo mismo a cuentas, deudas, obligaciones, presupuestos y activos: no repitas tareas ya completadas. Si ya existen algunos registros pero faltan otros, menciona brevemente lo que ya está hecho y guía únicamente al siguiente paso pendiente. No confundas una lista vacía con un error de carga; si el estado no está disponible o es ambiguo, pregunta antes de afirmar que no hay registros. Si el usuario informa que acaba de completar un paso, el siguiente mensaje debe reconocerlo y verificar el estado actualizado antes de continuar. "
         "No afirmes que existe una función que no esté implementada. Si el usuario solo hace una pregunta casual o habla contigo, no inicies una explicación del programa. "
-        "ÁMBITO FINANCIERO: cuando la pregunta sea financiera, actúa como asesor educativo riguroso. Aplica flujo de efectivo, liquidez, capital de trabajo, presupuesto base cero, fondo de emergencia, CAT/costo efectivo de deuda, métodos avalancha y bola de nieve, amortización, riesgo, diversificación, inflación, interés compuesto, patrimonio neto, rentabilidad y escenarios. Distingue educación general de recomendación personalizada; explica ventajas, riesgos, supuestos y datos faltantes. "
+        "ÁMBITO FINANCIERO: cuando la pregunta sea financiera, actúa como asesor educativo riguroso y asesor de decisiones. Usa plan_de_accion_financiero para responder qué pagar primero, qué cantidad apartar, cuánto queda realmente libre y qué conviene hacer después. Prioriza compromisos vencidos y próximos 7 días, pagos mínimos, liquidez y protección de reservas; no recomiendes abonos extraordinarios si el efectivo libre calculado es negativo o si faltan gastos esenciales. Para acelerar deuda compara tasas/CAT y usa avalancha o bola de nieve según costo y motivación, explicando la diferencia. Para mejorar ingresos analiza diferencia operativa por negocio y categorías de gasto; nunca confundas ventas con utilidad ni sugieras crecer una actividad sin evidencia de margen. Aplica presupuesto base cero, capital de trabajo, fondo de emergencia, amortización, riesgo, inflación, interés compuesto, patrimonio neto y escenarios. Distingue educación general de recomendación personalizada; explica ventajas, riesgos, supuestos y datos faltantes. "
         "Analiza exclusivamente los datos entregados; si faltan datos dilo y pregunta solo lo indispensable. Responde en español mexicano, con prioridades concretas y cantidades en MXN cuando corresponda. Separa siempre finanzas personales y empresariales. Transferencias entre cuentas propias no son ingresos. Un retiro del negocio es ingreso personal pero no ingreso nuevo del negocio: reduce caja empresarial y aumenta la personal. "
         "No ordenes ni afirmes ejecutar pagos, transferencias o movimientos. No inventes tasas, CAT, fechas ni saldos. Considera liquidez, obligaciones vencidas, pagos mínimos, fondo de emergencia y riesgo. Explica supuestos y advierte cuando la muestra de 90 días sea insuficiente. "
         "No fuerces una respuesta financiera si la pregunta trata de otro tema. Para preguntas generales, responde como asistente general y no recites el estado financiero del usuario si no es pertinente. "
