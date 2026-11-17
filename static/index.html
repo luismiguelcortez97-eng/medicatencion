@@ -185,13 +185,13 @@ async function addMovement(){const k=v('mKind'),scope=k==='withdrawal'?'business
 function editAccount(id){
  const a=DATA.accounts.find(x=>Number(x.id)===Number(id));if(!a)return;
  const p=$('accountEditPanel');p.classList.remove('hidden');
- p.innerHTML='<h3>Editar cuenta</h3><div class="formgrid"><div class="field"><label>NOMBRE DE LA CUENTA</label><input id="aeName"></div><div class="field"><label>TIPO</label><select id="aeKind"><option value="bank">Banco</option><option value="cash">Efectivo</option><option value="savings">Ahorro</option><option value="credit">Crédito</option></select></div><div class="field"><label>RESERVA DE EMERGENCIA</label><select id="aeReserve"><option value="false">No</option><option value="true">Sí, reservar este saldo</option></select></div></div><div class="notice">El saldo y la pertenencia de la cuenta no se modifican aquí para proteger los movimientos y los cálculos históricos.</div><div class="actions"><button onclick="saveAccountEdit('+a.id+')">Guardar cambios</button><button class="secondary" onclick="cancelAccountEdit()">Cancelar</button></div>';
- $('aeName').value=a.name;$('aeKind').value=a.kind;$('aeReserve').value=String(!!a.is_reserve);
+ p.innerHTML='<h3>Editar cuenta</h3><div class="formgrid"><div class="field"><label>NOMBRE DE LA CUENTA</label><input id="aeName"></div><div class="field"><label>TIPO</label><select id="aeKind"><option value="bank">Banco</option><option value="cash">Efectivo</option><option value="savings">Ahorro</option><option value="credit">Crédito</option></select></div><div class="field"><label>EFECTIVO / SALDO ACTUAL ($)</label><input id="aeBalance" type="number" min="0" max="1000000000" step="0.01"></div><div class="field"><label>RESERVA DE EMERGENCIA</label><select id="aeReserve"><option value="false">No</option><option value="true">Sí, reservar este saldo</option></select></div></div><div class="notice">Puedes corregir el saldo actual. Esto no modifica ni elimina los movimientos históricos registrados.</div><div class="actions"><button onclick="saveAccountEdit('+a.id+')">Guardar cambios</button><button class="secondary" onclick="cancelAccountEdit()">Cancelar</button></div>';
+ $('aeName').value=a.name;$('aeKind').value=a.kind;$('aeBalance').value=Number(a.balance||0);$('aeReserve').value=String(!!a.is_reserve);
  p.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function cancelAccountEdit(){$('accountEditPanel').classList.add('hidden');$('accountEditPanel').innerHTML=''}
 async function saveAccountEdit(id){
- const d={name:v('aeName'),kind:v('aeKind'),is_reserve:v('aeReserve')==='true'};
+ const d={name:v('aeName'),kind:v('aeKind'),balance:num('aeBalance'),is_reserve:v('aeReserve')==='true'};
  try{await api('accounts/'+id,'PUT',{data:d});await refresh();cancelAccountEdit();notify('Cuenta actualizada.')}catch(e){notify(e.message)}
 }
 async function deleteAccount(id){
