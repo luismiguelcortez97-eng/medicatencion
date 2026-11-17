@@ -359,8 +359,16 @@ def travis(x:Data,user=Depends(auth)):
                 result=json.loads(response.read().decode("utf-8"))
             answer=result["choices"][0]["message"]["content"].strip()
             return {"answer":answer,"mode":"IA generativa conectada","ai_enabled":True}
-        except Exception:
-            pass
+        except urllib.error.HTTPError as e:
+            try:
+                detail=json.loads(e.read().decode("utf-8")).get("error",{}).get("message","")
+            except Exception:
+                detail=""
+            print("TRAVIS_OPENAI_HTTP_ERROR",e.code,detail[:500],flush=True)
+            return {"answer":"No pude obtener respuesta de la IA. OpenAI devolvió un error HTTP "+str(e.code)+". "+(detail[:350] if detail else "Revisa la clave, el modelo y la facturación de tu cuenta de API."),"mode":"error de conexión IA","ai_enabled":False}
+        except Exception as e:
+            print("TRAVIS_OPENAI_ERROR",type(e).__name__,str(e)[:500],flush=True)
+            return {"answer":"No pude conectar con la IA en este momento ("+type(e).__name__+"). Intenta de nuevo en unos segundos. No he sustituido tu pregunta por un análisis financiero automático.","mode":"error de conexión IA","ai_enabled":False}
     advice=[]
     surplus=d["income"]-d["expense"]
     if d["overdue"]: advice.append("Prioridad 1: revisa las "+str(int(d["overdue"]))+" obligaciones vencidas y contacta al acreedor antes de destinar excedentes a pagos anticipados.")
