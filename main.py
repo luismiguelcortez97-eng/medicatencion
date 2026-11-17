@@ -335,7 +335,7 @@ def travis(x:Data,user=Depends(auth)):
     # Travis usa Groq Free como proveedor principal. No llama a OpenAI para evitar cargos.
     key=os.getenv("GROQ_API_KEY")
     if key:
-        model=os.getenv("GROQ_MODEL","llama-3.3-70b-versatile")
+        model=os.getenv("GROQ_MODEL","openai/gpt-oss-120b")
         system=("Eres Travis, un asistente de inteligencia artificial general, conversacional y multidisciplinario integrado en la aplicación Finanzas. "
         "Tu alcance no se limita a las finanzas: responde preguntas de ciencia, historia, cultura, tecnología, medicina general, programación, educación, negocios, matemáticas, idiomas y temas cotidianos. "
         "Contesta directamente y con profundidad proporcional a la pregunta. Explica conceptos desde cero cuando sea necesario, da ejemplos prácticos y adapta el nivel al usuario. "
