@@ -43,7 +43,7 @@
 .dog-mouth{position:absolute;left:51px;top:87px;width:2px;height:16px;background:#58616b;z-index:5}
 @keyframes travisFloat{0%,100%{transform:translateY(0) rotateY(-4deg)}50%{transform:translateY(-6px) rotateY(5deg)}}
 @keyframes travisLook{0%,35%,100%{transform:rotateY(-8deg) rotateX(3deg)}48%,65%{transform:rotateY(8deg) rotateX(1deg)}}
-.travis-dock{position:fixed;right:20px;bottom:18px;width:min(390px,calc(100vw - 28px));z-index:30;background:var(--paper);border:1px solid var(--line);border-radius:17px;box-shadow:0 15px 45px #07182c33;overflow:hidden}
+.travis-dock{position:fixed;right:20px;bottom:18px;width:min(390px,calc(100vw - 28px));z-index:30;background:var(--paper);border:1px solid var(--line);border-radius:17px;box-shadow:0 15px 45px #07182c33;overflow:hidden;touch-action:auto}.travis-dock-head{cursor:grab;user-select:none;touch-action:none}.travis-dock-head.dragging{cursor:grabbing}.travis-dock-head button{cursor:pointer;touch-action:manipulation}
 .travis-dock-head{display:flex;align-items:center;gap:10px;padding:9px 12px;background:linear-gradient(120deg,#101e32,#294867);color:white}.travis-dock-head>div:nth-child(2){flex:1;min-width:0}.travis-dock-head .dock-dog{width:42px;height:42px;min-width:42px;margin:0;perspective:none;animation:none;overflow:hidden;border-radius:50%;background:#182b42}.travis-dock-head .dock-dog img{width:100%;height:100%;object-fit:cover;object-position:center 20%}
 .travis-dock-body{padding:12px;display:none}.travis-dock.open .travis-dock-body{display:block}
 .travis-chat-messages{height:min(330px,42vh);min-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:3px 2px 12px}.travis-msg{max-width:88%;padding:10px 12px;border-radius:14px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.55}.travis-msg.user{align-self:flex-end;background:#dce9f5;color:#18314a;border-bottom-right-radius:4px}.travis-msg.bot{align-self:flex-start;background:#f0f3f6;color:#243447;border-bottom-left-radius:4px}.travis-compose{display:flex;align-items:flex-end;gap:8px;border-top:1px solid var(--line);padding-top:10px}.travis-compose textarea{flex:1;min-width:0;min-height:42px;max-height:110px;resize:vertical;border:1px solid var(--line);border-radius:13px;padding:10px 12px;background:var(--paper);color:var(--ink)}.travis-compose button{height:42px;white-space:nowrap}.travis-hint{font-size:10px;color:var(--muted);margin-top:6px}
@@ -150,6 +150,53 @@ let travisSending=false;
 const travisHistory=[];
 async function askDock(){const q=v('dockQuestion').trim();if(!q||travisSending)return;travisSending=true;$('dockQuestion').value='';addTravisMessage(q,'user');const pending=addTravisMessage('Travis está escribiendo…','bot');$('dockSend').disabled=true;const priorHistory=travisHistory.slice(-12);try{const r=await api('travis','POST',{data:{question:q,context:currentView,history:priorHistory}});const answer=r.answer||'No recibí una respuesta.';pending.textContent=answer;travisHistory.push({role:'user',content:q},{role:'assistant',content:answer});if(travisHistory.length>12)travisHistory.splice(0,travisHistory.length-12)}catch(e){pending.textContent=e.message}finally{travisSending=false;$('dockSend').disabled=false;$('dockQuestion').focus();$('travisMessages').scrollTop=$('travisMessages').scrollHeight}}
 $('dockQuestion').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();askDock()}});
+function initTravisDrag(){
+ const dock=$('travisDock'),head=dock?.querySelector('.travis-dock-head');
+ if(!dock||!head)return;
+ const key='cf_travis_dock_position';
+ const clamp=()=>{
+  if(!dock.style.left&&!dock.style.top)return;
+  const r=dock.getBoundingClientRect(),pad=8;
+  const x=Math.max(pad,Math.min(window.innerWidth-r.width-pad,r.left));
+  const y=Math.max(pad,Math.min(window.innerHeight-r.height-pad,r.top));
+  dock.style.left=x+'px';dock.style.top=y+'px';dock.style.right='auto';dock.style.bottom='auto';
+  try{localStorage.setItem(key,JSON.stringify({x,y}))}catch(_){}
+ };
+ try{
+  const p=JSON.parse(localStorage.getItem(key)||'null');
+  if(p&&Number.isFinite(p.x)&&Number.isFinite(p.y)){
+   dock.style.left=Math.max(8,Math.min(window.innerWidth-dock.offsetWidth-8,p.x))+'px';
+   dock.style.top=Math.max(8,Math.min(window.innerHeight-dock.offsetHeight-8,p.y))+'px';
+   dock.style.right='auto';dock.style.bottom='auto';
+  }
+ }catch(_){}
+ let active=null;
+ head.addEventListener('pointerdown',e=>{
+  if(e.target.closest('button'))return;
+  const r=dock.getBoundingClientRect();
+  active={id:e.pointerId,dx:e.clientX-r.left,dy:e.clientY-r.top};
+  head.classList.add('dragging');
+  head.setPointerCapture(e.pointerId);
+  if(!dock.style.left){dock.style.left=r.left+'px';dock.style.top=r.top+'px';dock.style.right='auto';dock.style.bottom='auto'}
+  e.preventDefault();
+ });
+ head.addEventListener('pointermove',e=>{
+  if(!active||active.id!==e.pointerId)return;
+  const r=dock.getBoundingClientRect(),pad=8;
+  const x=Math.max(pad,Math.min(window.innerWidth-r.width-pad,e.clientX-active.dx));
+  const y=Math.max(pad,Math.min(window.innerHeight-r.height-pad,e.clientY-active.dy));
+  dock.style.left=x+'px';dock.style.top=y+'px';
+ });
+ const stop=e=>{
+  if(!active||active.id!==e.pointerId)return;
+  active=null;head.classList.remove('dragging');
+  const r=dock.getBoundingClientRect();
+  try{localStorage.setItem(key,JSON.stringify({x:r.left,y:r.top}))}catch(_){}
+ };
+ head.addEventListener('pointerup',stop);head.addEventListener('pointercancel',stop);
+ window.addEventListener('resize',clamp);
+}
+initTravisDrag();
 $('mDay').value=new Date().toISOString().slice(0,10);
 if(token)init();
 </script></body></html>
