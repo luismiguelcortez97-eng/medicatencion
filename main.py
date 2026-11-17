@@ -364,11 +364,20 @@ def travis(x:Data,user=Depends(auth)):
             return {"answer":answer,"mode":"Groq Free · IA generativa","ai_enabled":True}
         except urllib.error.HTTPError as e:
             try:
-                detail=json.loads(e.read().decode("utf-8")).get("error",{}).get("message","")
+                raw=e.read().decode("utf-8","replace")
             except Exception:
-                detail=""
-            print("TRAVIS_GROQ_HTTP_ERROR",e.code,detail[:500],flush=True)
-            return {"answer":"No pude obtener respuesta de Groq (HTTP "+str(e.code)+"). "+(detail[:350] if detail else "Revisa la clave GROQ_API_KEY y los límites gratuitos de tu cuenta."),"mode":"error de conexión Groq","ai_enabled":False}
+                raw=""
+            try:
+                parsed=json.loads(raw)
+                err=parsed.get("error",{}) if isinstance(parsed,dict) else {}
+                detail=err.get("message","") if isinstance(err,dict) else str(err)
+                code=err.get("code","") if isinstance(err,dict) else ""
+            except Exception:
+                detail=raw
+                code=""
+            detail=(str(detail or e.reason or "Sin detalle del proveedor")).replace("\\n"," ")[:700]
+            print("TRAVIS_GROQ_HTTP_ERROR",e.code,"CODE",code,"DETAIL",detail,flush=True)
+            return {"answer":"Groq rechazó la solicitud (HTTP "+str(e.code)+"). "+detail,"mode":"error de conexión Groq","ai_enabled":False}
         except Exception as e:
             print("TRAVIS_GROQ_ERROR",type(e).__name__,str(e)[:500],flush=True)
             return {"answer":"No pude conectar con Groq en este momento ("+type(e).__name__+"). Intenta de nuevo en unos segundos.","mode":"error de conexión Groq","ai_enabled":False}
