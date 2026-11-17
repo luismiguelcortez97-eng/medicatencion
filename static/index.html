@@ -80,34 +80,59 @@
 (function(){function buildTravis(hostId){
  const host=document.getElementById(hostId);if(!host||!window.THREE||host.dataset.ready)return;host.dataset.ready='1';
  host.querySelectorAll('.dog-shadow,.dog-body,.dog-neck,.dog-head').forEach(n=>n.style.display='none');
- const T=window.THREE,scene=new T.Scene(),camera=new T.PerspectiveCamera(32,1,.1,100);camera.position.set(0,1.15,5.9);
+ const T=window.THREE,small=hostId==='travisDock3d';
+ const scene=new T.Scene(),camera=new T.PerspectiveCamera(32,1,.1,100);camera.position.set(0,1.0,small?8.6:6.3);
  const renderer=new T.WebGLRenderer({alpha:true,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.setClearColor(0,0);
  host.appendChild(renderer.domElement);renderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%';
- scene.add(new T.HemisphereLight(0xffffff,0x29384d,2.1));const key=new T.DirectionalLight(0xffffff,2.5);key.position.set(-3,5,5);scene.add(key);
- const fill=new T.DirectionalLight(0xb9d9ff,1.1);fill.position.set(4,2,-3);scene.add(fill);
- const mat=(c,r=.68)=>new T.MeshStandardMaterial({color:c,roughness:r}),grey=mat(0x52677f),dark=mat(0x1c3048),cream=mat(0xf0eee7),white=mat(0xfaf8f1),inner=mat(0x9c7f79),gold=mat(0xc18c43,.3),black=mat(0x101820,.25);
+ scene.add(new T.HemisphereLight(0xffffff,0x29384d,2.2));const key=new T.DirectionalLight(0xffffff,2.6);key.position.set(-3,5,5);scene.add(key);
+ const fill=new T.DirectionalLight(0xb9d9ff,1.15);fill.position.set(4,2,-3);scene.add(fill);
+ const mat=(c,r=.72)=>new T.MeshStandardMaterial({color:c,roughness:r});
+ const sable=mat(0xb77a43),tan=mat(0xd39a61),cream=mat(0xf0e8d9),white=mat(0xfaf8f1),black=mat(0x202a34,.35),mask=mat(0x293746),grey=mat(0x64788c),inner=mat(0x9c7770),eye=mat(0x9a7845,.3),nose=mat(0x111820,.25);
  const dog=new T.Group();scene.add(dog);
  function ball(p,x,y,z,sx,sy,sz,m){const o=new T.Mesh(new T.SphereGeometry(1,32,24),m);o.position.set(x,y,z);o.scale.set(sx,sy,sz);p.add(o);return o}
  function cone(p,x,y,z,r,h,m,rz=0){const o=new T.Mesh(new T.ConeGeometry(r,h,32),m);o.position.set(x,y,z);o.rotation.z=rz;p.add(o);return o}
- ball(dog,0,-.53,-.12,.78,.57,.48,grey);ball(dog,0,-.48,.25,.43,.55,.18,cream);
- const head=new T.Group();head.position.set(0,.28,.24);dog.add(head);
- ball(head,0,.12,0,.65,.72,.55,grey);ball(head,0,.48,-.02,.44,.36,.48,dark);ball(head,0,.15,.445,.36,.55,.16,cream);
- cone(head,-.48,.78,-.02,.24,.72,dark,-.23);cone(head,.48,.78,-.02,.24,.72,dark,.23);
- cone(head,-.48,.76,.13,.12,.48,inner,-.23);cone(head,.48,.76,.13,.12,.48,inner,.23);
- ball(head,-.25,.18,.47,.19,.13,.12,cream);ball(head,.25,.18,.47,.19,.13,.12,cream);
- ball(head,-.24,.2,.565,.07,.075,.035,gold);ball(head,.24,.2,.565,.07,.075,.035,gold);
- ball(head,-.24,.2,.594,.032,.05,.02,black);ball(head,.24,.2,.594,.032,.05,.02,black);
- ball(head,-.25,.23,.62,.018,.02,.012,white);ball(head,.23,.23,.62,.018,.02,.012,white);
- ball(head,0,-.08,.58,.25,.18,.19,white);ball(head,0,.025,.745,.13,.09,.095,black);
- ball(head,0,-.18,.72,.018,.1,.015,dark);ball(dog,.72,-.42,-.38,.13,.42,.13,grey).rotation.z=-.6;
- function resize(){const w=Math.max(host.clientWidth,130),h=Math.max(host.clientHeight,130);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
+ // Cuerpo robusto y pecho amplio, con manto oscuro típico del pastor alemán.
+ ball(dog,0,-.53,-.12,.82,.58,.53,sable);
+ ball(dog,0,-.39,.18,.49,.62,.31,cream);
+ ball(dog,0,-.18,-.30,.72,.40,.39,mask);
+ // Patas delanteras y traseras visibles.
+ for(const x of [-.48,.48]){
+  ball(dog,x,-.91,.12,.19,.42,.20,tan);
+  ball(dog,x,-1.18,.20,.20,.13,.25,cream);
+  ball(dog,x*.78,-.84,-.43,.20,.43,.20,sable);
+ }
+ // Cuello claro con sombreado oscuro en la nuca.
+ ball(dog,0,-.24,.30,.48,.62,.34,tan);
+ ball(dog,0,-.05,.05,.39,.52,.28,mask);
+ const head=new T.Group();head.position.set(0,.30,.30);dog.add(head);
+ // Cráneo y máscara facial que mezcla rasgos de husky y pastor alemán.
+ ball(head,0,.12,0,.63,.70,.53,sable);
+ ball(head,0,.43,-.015,.48,.37,.48,mask);
+ ball(head,0,.10,.39,.34,.49,.18,cream);
+ // Orejas grandes, altas y erguidas, con interior cálido.
+ cone(head,-.43,.78,-.03,.255,.82,mask,-.20);cone(head,.43,.78,-.03,.255,.82,mask,.20);
+ cone(head,-.43,.79,.105,.145,.59,inner,-.20);cone(head,.43,.79,.105,.145,.59,inner,.20);
+ // Mejillas blancas del husky y cejas oscuras.
+ ball(head,-.29,-.02,.42,.23,.20,.16,white);ball(head,.29,-.02,.42,.23,.20,.16,white);
+ ball(head,-.235,.22,.48,.20,.115,.10,mask);ball(head,.235,.22,.48,.20,.115,.10,mask);
+ // Ojos ámbar, expresivos y atentos.
+ ball(head,-.235,.17,.555,.075,.078,.035,eye);ball(head,.235,.17,.555,.075,.078,.035,eye);
+ ball(head,-.235,.17,.584,.032,.052,.018,nose);ball(head,.235,.17,.584,.032,.052,.018,nose);
+ ball(head,-.25,.20,.602,.018,.02,.012,white);ball(head,.22,.20,.602,.018,.02,.012,white);
+ // Hocico más largo y afinado, propio del pastor alemán, con máscara blanca husky.
+ ball(head,0,-.13,.60,.245,.17,.29,cream);
+ ball(head,0,-.075,.83,.135,.09,.10,nose);
+ ball(head,0,-.27,.68,.025,.09,.018,mask);
+ // Cola tupida.
+ const tail=ball(dog,.76,-.38,-.45,.16,.48,.18,mask);tail.rotation.z=-.72;
+ ball(dog,.88,-.67,-.39,.18,.22,.19,cream);
+ function resize(){const w=Math.max(host.clientWidth,small?56:130),h=Math.max(host.clientHeight,small?56:130);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
  resize();if(window.ResizeObserver)new ResizeObserver(resize).observe(host);const clock=new T.Clock();
- function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();dog.position.y=Math.sin(t*1.6)*.035;head.rotation.y=Math.sin(t*.8)*.12;head.rotation.x=Math.sin(t*.65)*.025;renderer.render(scene,camera)}animate();
+ function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();dog.position.y=Math.sin(t*1.5)*.028;head.rotation.y=Math.sin(t*.75)*.10;head.rotation.x=Math.sin(t*.6)*.018;tail.rotation.z=-.72+Math.sin(t*2)*.12;renderer.render(scene,camera)}animate();
  }
  const start=()=>{buildTravis('travis3d');buildTravis('travisDock3d')};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
-})();
-</script>
+})();</script>
 <script>
 let token=localStorage.getItem('cf_token'),DATA={businesses:[],accounts:[],movements:[],debts:[],obligations:[],budgets:[]};
 const $=id=>document.getElementById(id),v=id=>$(id)?.value??'',num=id=>v(id)===''?null:Number(v(id)),money=n=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(Number(n)||0),esc=s=>String(s??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
