@@ -1,5 +1,6 @@
 import os, hmac, hashlib, secrets, json, urllib.request, urllib.error, calendar
 from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 from contextlib import contextmanager
 from pathlib import Path
 import psycopg
@@ -18,6 +19,11 @@ if not DB:
 if not SECRET or len(SECRET) < 32:
     raise RuntimeError("APP_SECRET debe tener al menos 32 caracteres.")
 app = FastAPI(title="Finanzas · Travis", version="3.0.0")
+
+# Todas las fechas operativas usan la hora local de Mexicali.
+MEXICALI_TZ = ZoneInfo("America/Tijuana")
+def mx_today():
+    return datetime.now(MEXICALI_TZ).date()
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
 @contextmanager
@@ -186,7 +192,7 @@ def add(table:str,x:Data,user=Depends(auth)):
         elif table=="movements":
             sc=valid_scope(d.get("scope")); n=valid_amount(d.get("amount")); k=d.get("kind")
             if k not in ("income","expense","transfer","withdrawal"): raise HTTPException(422,"Tipo de movimiento inválido.")
-            day=str(d.get("day") or date.today().isoformat())
+            day=str(d.get("day") or mx_today().isoformat())
             try: datetime.strptime(day,"%Y-%m-%d")
             except: raise HTTPException(422,"Fecha inválida.")
             bid=d.get("business_id") if sc=="business" or k=="withdrawal" else None
@@ -267,7 +273,7 @@ def movement_payload(d):
     sc=valid_scope(d.get("scope")); k=str(d.get("kind") or "")
     if k not in ("income","expense","transfer","withdrawal"): raise HTTPException(422,"Tipo de movimiento inválido.")
     amount=valid_amount(d.get("amount"))
-    day=str(d.get("day") or date.today().isoformat())
+    day=str(d.get("day") or mx_today().isoformat())
     try: datetime.strptime(day,"%Y-%m-%d")
     except ValueError: raise HTTPException(422,"Fecha inválida.")
     bid=d.get("business_id") if sc=="business" or k=="withdrawal" else None
@@ -401,14 +407,14 @@ def paid(oid:int,user=Depends(auth)):
 
 @app.get("/api/dashboard")
 def dashboard(user=Depends(auth)):
-    month=date.today().strftime("%Y-%m")
+    month=mx_today().strftime("%Y-%m")
     with con() as c:
         def total(sql,args=()):
             c.execute(sql,args); return float(c.fetchone()["v"] or 0)
         c.execute("SELECT emergency_months FROM financial_settings WHERE id=1"); setting=c.fetchone()
         emergency_months=int(setting["emergency_months"]) if setting else 3
         reserve=total("SELECT COALESCE(SUM(balance),0) v FROM accounts WHERE scope='personal' AND is_reserve=TRUE")
-        monthly_expense_avg=total("SELECT COALESCE(SUM(amount),0)/3.0 v FROM movements WHERE kind='expense' AND scope='personal' AND day >= %s",( (date.today()-timedelta(days=90)).isoformat(), ))
+        monthly_expense_avg=total("SELECT COALESCE(SUM(amount),0)/3.0 v FROM movements WHERE kind='expense' AND scope='personal' AND day >= %s",( (mx_today()-timedelta(days=90)).isoformat(), ))
         personal_assets=total("SELECT COALESCE(SUM(current_value),0) v FROM assets WHERE scope='personal'")
         business_assets=total("SELECT COALESCE(SUM(current_value),0) v FROM assets WHERE scope='business'")
         return {
@@ -430,12 +436,12 @@ def dashboard(user=Depends(auth)):
         "business_income":total("SELECT COALESCE(SUM(amount),0) v FROM movements WHERE kind='income' AND scope='business' AND substring(day,1,7)=%s",(month,)),
         "business_expense":total("SELECT COALESCE(SUM(amount),0) v FROM movements WHERE kind='expense' AND scope='business' AND substring(day,1,7)=%s",(month,)),
         "obligations":total("SELECT COUNT(*) v FROM obligations WHERE paid=0"),
-        "overdue":total("SELECT COUNT(*) v FROM obligations WHERE paid=0 AND due_date<%s",(date.today().isoformat(),))
+        "overdue":total("SELECT COUNT(*) v FROM obligations WHERE paid=0 AND due_date<%s",(mx_today().isoformat(),))
         }
 
 @app.get("/api/insights")
 def insights(user=Depends(auth)):
-    today=date.today()
+    today=mx_today()
     start=(today-timedelta(days=90)).isoformat()
     month=today.strftime("%Y-%m")
     with con() as c:
@@ -495,7 +501,7 @@ def _next_debt_due(row, today):
 
 @app.get("/api/decision-plan")
 def decision_plan(user=Depends(auth)):
-    today=date.today()
+    today=mx_today()
     horizon7=today+timedelta(days=7)
     horizon30=today+timedelta(days=30)
     with con() as c:
