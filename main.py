@@ -162,6 +162,8 @@ def get_data(user=Depends(auth)):
 @app.post("/api/{table}")
 def add(table:str,x:Data,user=Depends(auth)):
     d=x.data
+    # /api/travis coincide con esta ruta dinámica; enrutarlo explícitamente al asistente.
+    if table=="travis": return travis(x,user)
     with con() as c:
         if table=="businesses":
             name=str(d.get("name") or "").strip()
