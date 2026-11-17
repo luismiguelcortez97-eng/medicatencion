@@ -137,7 +137,7 @@ const combined=[...ordinary,...debtRows].sort((a,b)=>String(a.due_display||'').l
 $('obligations').innerHTML=table(['Concepto','Caja','Importe','Frecuencia','Próximo vencimiento','Estado'],combined.map(o=>{
  if(o.source_type==='debt')return tr([esc(o.name),o.scope==='personal'?'Personal':'Negocio',money(o.amount),o.frequency==='weekly'?'Semanal':o.frequency==='monthly'?'Mensual':'Fecha única',formatMXDate(o.due_display),'<button class="secondary" onclick="openDebtPayment('+Number(o.id)+')">Registrar pago</button>']);
  return tr([esc(o.name),o.scope==='personal'?'Personal':'Negocio',money(o.amount),o.frequency==='weekly'?'Semanal':o.frequency==='monthly'?'Mensual':'Una sola vez',formatMXDate(o.due_display),o.paid?'<span class="pill green">Pagada</span>':'<button class="secondary" onclick="markPaid('+o.id+')">Marcar pagada</button>']);
-})));
+}));
 $('budgets').innerHTML=table(['Nombre','Caja','Categoría','Límite mensual'],DATA.budgets.map(b=>tr([esc(b.name),b.scope==='personal'?'Personal':'Negocio',esc(b.category),money(b.monthly_limit)])));
 }
 function renderTodayPayments(plan){
