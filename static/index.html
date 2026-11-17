@@ -146,6 +146,22 @@ input[type="date"],input[type="time"]{-webkit-appearance:none;appearance:none;mi
  .travis-compose button,.actions button{min-height:46px}
  .toast{left:12px;right:12px;bottom:calc(16px + env(safe-area-inset-bottom));width:auto;max-width:none;text-align:center}
 }
+
+/* Resumen: contener cada bloque dentro de los márgenes reales del teléfono */
+#inicio{display:block;width:100%;max-width:100%;min-width:0;margin:0;padding:0;overflow-x:clip}
+#inicio>*{box-sizing:border-box;width:100%;max-width:100%;min-width:0}
+#inicio>.sectionhead{width:100%;margin-left:0;margin-right:0}
+#inicio>.grid,#inicio>.two{display:grid;width:100%;max-width:100%;min-width:0;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+#inicio>.grid>.card,#inicio>.two>.card{width:100%;max-width:100%;min-width:0}
+#inicio .metric,#inicio h2,#inicio p,#inicio .rowitem{min-width:0;overflow-wrap:anywhere}
+@media(hover:none) and (pointer:coarse){
+ #inicio{padding-left:0;padding-right:0}
+ #inicio>.card,#inicio>.notice{margin-left:0!important;margin-right:0!important;width:100%;max-width:100%}
+ #inicio>.grid,#inicio>.two{grid-template-columns:minmax(0,1fr);gap:10px}
+ #inicio>.sectionhead{padding-left:2px;padding-right:2px}
+ #inicio .metric{font-size:clamp(18px,5.5vw,24px);overflow-wrap:anywhere}
+ #inicio .card{padding:14px}
+}
 </style></head>
 <body><main class="wrap">
 <div id="auth" class="card auth"><div class="brand"><div class="eyebrow">Control inteligente</div><h1 style="margin-top:10px">Finanzas <span style="color:var(--gold)">·</span> Travis</h1><p style="color:#cbd7e3;margin:0">Tus decisiones, respaldadas por tus números.</p></div><div id="loginPane"><h2>Iniciar sesión</h2><div class="field"><label>USUARIO</label><input id="user" autocomplete="username" minlength="3" maxlength="60" placeholder="Mínimo 3 caracteres"></div><div class="field"><label>CONTRASEÑA</label><input id="pass" type="password" autocomplete="current-password" minlength="6" maxlength="200" placeholder="123456"></div><button style="width:100%" onclick="login()">Entrar</button><p class="muted small" id="authmsg" style="margin-top:12px"></p><p class="small muted">¿Primera vez? <a href="#" onclick="toggleRegister();return false">Crear cuenta propietaria</a></p></div><div id="registerPane" class="hidden"><h2>Crear usuario propietario</h2><div class="field"><label>USUARIO</label><input id="newuser" autocomplete="username" minlength="3" maxlength="60" placeholder="Mínimo 3 caracteres"></div><div class="field"><label>CONTRASEÑA SEGURA</label><input id="newpass" type="password" autocomplete="new-password" minlength="6" maxlength="200" placeholder="Mínimo 6 caracteres"></div><button style="width:100%" onclick="register()">Crear acceso</button><p class="small muted" id="regmsg"></p><p class="small"><a href="#" onclick="toggleRegister();return false">Volver a iniciar sesión</a></p></div></div>
