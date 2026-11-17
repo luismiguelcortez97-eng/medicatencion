@@ -541,7 +541,7 @@ def decision_plan(user=Depends(auth)):
             monthly_obligations[scope]+=amount
         elif month_start<=due<=month_end:
             one_time_due_this_month[scope]+=amount
-        due_items.append({"type":"obligation","name":o["name"],"scope":scope,"amount":amount,"frequency":frequency,"monthly_equivalent":round(amount*52/12,2) if frequency=="weekly" else (amount if frequency=="monthly" else (amount if month_start<=due<=month_end else 0)),"due":due.isoformat(),"days":(due-today).days,"business_id":None})
+        due_items.append({"id":int(o["id"]),"type":"obligation","name":o["name"],"scope":scope,"amount":amount,"frequency":frequency,"monthly_equivalent":round(amount*52/12,2) if frequency=="weekly" else (amount if frequency=="monthly" else (amount if month_start<=due<=month_end else 0)),"due":due.isoformat(),"days":(due-today).days,"business_id":None})
     for d in debts:
         due=_next_debt_due(d,today)
         amount=float(d["min_payment"] or 0)
@@ -553,7 +553,7 @@ def decision_plan(user=Depends(auth)):
         elif due_type=="monthly_day":
             monthly_debt_minimums[scope]+=amount
         if due:
-            due_items.append({"type":"debt_minimum","name":d["creditor"],"scope":scope,"amount":amount,"frequency":"weekly" if due_type=="weekly" else "monthly" if due_type=="monthly_day" else "date","monthly_equivalent":round(amount*52/12,2) if due_type=="weekly" else (amount if due_type=="monthly_day" else 0),"due":due.isoformat(),"days":(due-today).days,"rate":float(d["rate"] or 0),"balance":float(d["balance"] or 0),"business_id":d["business_id"]})
+            due_items.append({"id":int(d["id"]),"type":"debt_minimum","name":d["creditor"],"scope":scope,"amount":amount,"frequency":"weekly" if due_type=="weekly" else "monthly" if due_type=="monthly_day" else "date","monthly_equivalent":round(amount*52/12,2) if due_type=="weekly" else (amount if due_type=="monthly_day" else 0),"due":due.isoformat(),"days":(due-today).days,"rate":float(d["rate"] or 0),"balance":float(d["balance"] or 0),"business_id":d["business_id"]})
     monthly_fixed_total={scope:round(monthly_obligations[scope]+monthly_debt_minimums[scope],2) for scope in ("personal","business")}
     monthly_cash_commitments={scope:round(monthly_fixed_total[scope]+one_time_due_this_month[scope],2) for scope in ("personal","business")}
     due7=[x for x in due_items if x["days"]<=7]
