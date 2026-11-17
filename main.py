@@ -396,7 +396,33 @@ def travis(x:Data,user=Depends(auth)):
                 history.append({"role":role,"content":content})
     d=dashboard(user)
     ins=insights(user)
+    # Estado operativo real: evita que Travis repita pasos ya completados.
+    with con() as c:
+        c.execute("SELECT id,name FROM businesses ORDER BY id")
+        registered_businesses=c.fetchall()
+        c.execute("SELECT id,name,kind,scope,business_id,balance FROM accounts ORDER BY id")
+        registered_accounts=c.fetchall()
+        c.execute("SELECT id,creditor,scope,balance,due_type,due_date,weekly_day,due_day FROM debts ORDER BY id")
+        registered_debts=c.fetchall()
+        c.execute("SELECT id,name,scope,amount,due_date,frequency,paid FROM obligations ORDER BY id")
+        registered_obligations=c.fetchall()
+        c.execute("SELECT id,name,scope,category,monthly_limit FROM budgets ORDER BY id")
+        registered_budgets=c.fetchall()
+        c.execute("SELECT id,name,scope,category,current_value FROM assets ORDER BY id")
+        registered_assets=c.fetchall()
+        c.execute("SELECT COUNT(*) AS total FROM movements")
+        movement_count=c.fetchone()["total"]
+    records={
+        "negocios_registrados":registered_businesses,
+        "cuentas_registradas":registered_accounts,
+        "deudas_registradas":registered_debts,
+        "obligaciones_registradas":registered_obligations,
+        "presupuestos_registrados":registered_budgets,
+        "activos_registrados":registered_assets,
+        "cantidad_movimientos_registrados":movement_count
+    }
     snapshot={
+        "estado_real_de_registros":records,
         "moneda":"MXN",
         "efectivo_personal":d["cash"],
         "deuda_personal":d["debt"],
@@ -434,7 +460,7 @@ def travis(x:Data,user=Depends(auth)):
         "REGLA OBLIGATORIA AL ENSEÑAR EL PROGRAMA: responde únicamente con texto conversacional. No muestres, insertes, reproduzcas ni simules páginas de la aplicación, pantallas, interfaces, paneles, tarjetas, tablas, formularios, botones visuales, capturas, bloques de código ni enlaces para abrir secciones. No escribas como si estuvieras mostrando la página. Describe con palabras qué debe hacer el usuario dentro de la aplicación. "
         "Guía de forma secuencial: da solo el paso actual y espera a que el usuario confirme que terminó (por ejemplo, que diga 'listo') antes de indicar el siguiente. No adelantes una lista larga de pasos, salvo que el usuario pida expresamente el procedimiento completo. "
         "En cada paso indica claramente: 1) en qué apartado debe entrar, 2) qué acción debe realizar, 3) qué dato debe escribir o seleccionar, 4) cómo saber que terminó correctamente y 5) por qué ese paso es necesario. Usa frases cortas y lenguaje sencillo, sin asumir que el usuario conoce el programa. Si falta un dato, explica cómo obtenerlo o permite dejarlo pendiente si es seguro. "
-        "Orden recomendado para empezar: primero registra cada negocio; segundo crea cuentas personales y empresariales con sus saldos actuales; tercero captura deudas con acreedor, saldo, tasa/CAT conocida, pago mínimo y día de vencimiento; cuarto obligaciones próximas; quinto presupuestos; sexto movimientos diarios con fecha, concepto, importe, tipo, cuenta y categoría; séptimo activos y fondo de emergencia; finalmente revisa distribución, proyección y reportes. "
+        "REGLA PRIORITARIA DE PROGRESO: antes de recomendar o preguntar por cualquier paso de configuración, revisa siempre estado_real_de_registros dentro del contexto de la aplicación. Ese inventario proviene directamente de la base de datos y es la fuente de verdad. Si negocios_registrados contiene uno o más elementos, nunca preguntes si ya registró sus negocios ni le indiques registrarlos otra vez; reconoce los nombres existentes y continúa con el primer módulo posterior que realmente falte. Aplica lo mismo a cuentas, deudas, obligaciones, presupuestos y activos: no repitas tareas ya completadas. Si ya existen algunos registros pero faltan otros, menciona brevemente lo que ya está hecho y guía únicamente al siguiente paso pendiente. No confundas una lista vacía con un error de carga; si el estado no está disponible o es ambiguo, pregunta antes de afirmar que no hay registros. Si el usuario informa que acaba de completar un paso, el siguiente mensaje debe reconocerlo y verificar el estado actualizado antes de continuar. "
         "No afirmes que existe una función que no esté implementada. Si el usuario solo hace una pregunta casual o habla contigo, no inicies una explicación del programa. "
         "ÁMBITO FINANCIERO: cuando la pregunta sea financiera, actúa como asesor educativo riguroso. Aplica flujo de efectivo, liquidez, capital de trabajo, presupuesto base cero, fondo de emergencia, CAT/costo efectivo de deuda, métodos avalancha y bola de nieve, amortización, riesgo, diversificación, inflación, interés compuesto, patrimonio neto, rentabilidad y escenarios. Distingue educación general de recomendación personalizada; explica ventajas, riesgos, supuestos y datos faltantes. "
         "Analiza exclusivamente los datos entregados; si faltan datos dilo y pregunta solo lo indispensable. Responde en español mexicano, con prioridades concretas y cantidades en MXN cuando corresponda. Separa siempre finanzas personales y empresariales. Transferencias entre cuentas propias no son ingresos. Un retiro del negocio es ingreso personal pero no ingreso nuevo del negocio: reduce caja empresarial y aumenta la personal. "
