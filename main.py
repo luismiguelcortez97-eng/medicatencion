@@ -185,10 +185,15 @@ def add(table:str,x:Data,user=Depends(auth)):
             c.execute("INSERT INTO accounts(name,kind,scope,business_id,balance,is_reserve) VALUES(%s,%s,%s,%s,%s,%s) RETURNING id",(name,d.get("kind") or "bank",sc,bid,bal,bool(d.get("is_reserve",False))))
         elif table=="movements":
             sc=valid_scope(d.get("scope")); n=valid_amount(d.get("amount")); k=d.get("kind")
+            if k not in ("income","expense","transfer","withdrawal"): raise HTTPException(422,"Tipo de movimiento inválido.")
             day=str(d.get("day") or date.today().isoformat())
             try: datetime.strptime(day,"%Y-%m-%d")
             except: raise HTTPException(422,"Fecha inválida.")
-            item={"kind":k,"scope":sc,"amount":n,"account_id":d.get("account_id"),"dest_id":d.get("dest_id"),"business_id":d.get("business_id")}
+            bid=d.get("business_id") if sc=="business" or k=="withdrawal" else None
+            if sc=="business" or k=="withdrawal":
+                c.execute("SELECT id FROM businesses WHERE id=%s",(bid,))
+                if not c.fetchone(): raise HTTPException(422,"Selecciona el negocio correspondiente.")
+            item={"kind":k,"scope":sc,"amount":n,"account_id":d.get("account_id"),"dest_id":d.get("dest_id"),"business_id":bid}
             apply_movement(c,item)
             c.execute("INSERT INTO movements(kind,scope,concept,amount,day,account_id,dest_id,business_id,category) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
             (k,sc,str(d.get("concept") or "Sin concepto").strip(),n,day,item["account_id"],item["dest_id"],item["business_id"],d.get("category") or "General"))
@@ -236,6 +241,60 @@ def add(table:str,x:Data,user=Depends(auth)):
             c.execute("INSERT INTO budgets(name,scope,category,monthly_limit) VALUES(%s,%s,%s,%s) RETURNING id",(name,valid_scope(d.get("scope")),cat,valid_amount(d.get("monthly_limit"))))
         else: raise HTTPException(404,"Sección inválida.")
         return {"id":c.fetchone()["id"],"ok":True}
+
+def reverse_movement(c,item):
+    k=item["kind"]; n=float(item["amount"]); src=item.get("account_id"); dst=item.get("dest_id")
+    ids=[x for x in (src,dst) if x]
+    if ids:
+        c.execute("SELECT id,balance FROM accounts WHERE id = ANY(%s) FOR UPDATE",(ids,))
+        balances={r["id"]:float(r["balance"]) for r in c.fetchall()}
+    else: balances={}
+    if k=="income":
+        if not dst or dst not in balances: raise HTTPException(409,"La cuenta que recibió el ingreso ya no existe.")
+        if balances[dst]+1e-8<n: raise HTTPException(409,"No se puede revertir el ingreso porque ese dinero ya fue utilizado. Ajusta primero el saldo de la cuenta.")
+        c.execute("UPDATE accounts SET balance=balance-%s WHERE id=%s",(n,dst))
+    elif k=="expense":
+        if not src or src not in balances: raise HTTPException(409,"La cuenta del gasto ya no existe.")
+        c.execute("UPDATE accounts SET balance=balance+%s WHERE id=%s",(n,src))
+    elif k in ("transfer","withdrawal"):
+        if not src or not dst or src not in balances or dst not in balances: raise HTTPException(409,"No se encontraron las cuentas del movimiento.")
+        if balances[dst]+1e-8<n: raise HTTPException(409,"No se puede revertir el movimiento porque el dinero de destino ya fue utilizado.")
+        c.execute("UPDATE accounts SET balance=balance+%s WHERE id=%s",(n,src))
+        c.execute("UPDATE accounts SET balance=balance-%s WHERE id=%s",(n,dst))
+    else: raise HTTPException(422,"Tipo de movimiento inválido.")
+
+def movement_payload(d):
+    sc=valid_scope(d.get("scope")); k=str(d.get("kind") or "")
+    if k not in ("income","expense","transfer","withdrawal"): raise HTTPException(422,"Tipo de movimiento inválido.")
+    amount=valid_amount(d.get("amount"))
+    day=str(d.get("day") or date.today().isoformat())
+    try: datetime.strptime(day,"%Y-%m-%d")
+    except ValueError: raise HTTPException(422,"Fecha inválida.")
+    bid=d.get("business_id") if sc=="business" or k=="withdrawal" else None
+    return {"kind":k,"scope":sc,"amount":amount,"day":day,"concept":str(d.get("concept") or "Sin concepto").strip(),"account_id":d.get("account_id"),"dest_id":d.get("dest_id"),"business_id":bid,"category":d.get("category") or "General"}
+
+@app.put("/api/movements/{movement_id}")
+def update_movement(movement_id:int,x:Data,user=Depends(auth)):
+    item=movement_payload(x.data)
+    with con() as c:
+        c.execute("SELECT * FROM movements WHERE id=%s FOR UPDATE",(movement_id,))
+        old=c.fetchone()
+        if not old: raise HTTPException(404,"Movimiento no encontrado.")
+        reverse_movement(c,old)
+        apply_movement(c,item)
+        c.execute("UPDATE movements SET kind=%s,scope=%s,concept=%s,amount=%s,day=%s,account_id=%s,dest_id=%s,business_id=%s,category=%s WHERE id=%s",
+          (item["kind"],item["scope"],item["concept"],item["amount"],item["day"],item["account_id"],item["dest_id"],item["business_id"],item["category"],movement_id))
+    return {"ok":True,"id":movement_id}
+
+@app.delete("/api/movements/{movement_id}")
+def delete_movement(movement_id:int,user=Depends(auth)):
+    with con() as c:
+        c.execute("SELECT * FROM movements WHERE id=%s FOR UPDATE",(movement_id,))
+        old=c.fetchone()
+        if not old: raise HTTPException(404,"Movimiento no encontrado.")
+        reverse_movement(c,old)
+        c.execute("DELETE FROM movements WHERE id=%s",(movement_id,))
+    return {"ok":True,"id":movement_id}
 
 @app.put("/api/debts/{debt_id}")
 def update_debt(debt_id:int,x:Data,user=Depends(auth)):
