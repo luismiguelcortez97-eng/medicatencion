@@ -34,10 +34,14 @@ def init_db():
     """CREATE TABLE IF NOT EXISTS movements(id BIGSERIAL PRIMARY KEY,kind TEXT NOT NULL,scope TEXT NOT NULL,concept TEXT NOT NULL,amount DOUBLE PRECISION NOT NULL CHECK(amount>0),day TEXT NOT NULL,account_id BIGINT REFERENCES accounts(id),dest_id BIGINT REFERENCES accounts(id),business_id BIGINT REFERENCES businesses(id),category TEXT)""",
     """CREATE TABLE IF NOT EXISTS debts(id BIGSERIAL PRIMARY KEY,creditor TEXT NOT NULL,scope TEXT NOT NULL,business_id BIGINT REFERENCES businesses(id),balance DOUBLE PRECISION NOT NULL DEFAULT 0,rate DOUBLE PRECISION DEFAULT 0,min_payment DOUBLE PRECISION DEFAULT 0,due_day INTEGER)""",
     """CREATE TABLE IF NOT EXISTS obligations(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,scope TEXT NOT NULL,amount DOUBLE PRECISION NOT NULL,due_date TEXT NOT NULL,paid INTEGER NOT NULL DEFAULT 0)""",
-    """CREATE TABLE IF NOT EXISTS budgets(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,scope TEXT NOT NULL,category TEXT NOT NULL,monthly_limit DOUBLE PRECISION NOT NULL)"""
+    """CREATE TABLE IF NOT EXISTS budgets(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,scope TEXT NOT NULL,category TEXT NOT NULL,monthly_limit DOUBLE PRECISION NOT NULL)""",
+    """CREATE TABLE IF NOT EXISTS assets(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,scope TEXT NOT NULL,business_id BIGINT REFERENCES businesses(id),category TEXT NOT NULL,current_value DOUBLE PRECISION NOT NULL CHECK(current_value>=0))""",
+    """CREATE TABLE IF NOT EXISTS financial_settings(id INTEGER PRIMARY KEY CHECK(id=1),emergency_months INTEGER NOT NULL DEFAULT 3 CHECK(emergency_months BETWEEN 1 AND 12))""",
+    """ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_reserve BOOLEAN NOT NULL DEFAULT FALSE"""
     ]
     with con() as c:
         for s in sqls: c.execute(s)
+        c.execute("INSERT INTO financial_settings(id,emergency_months) VALUES(1,3) ON CONFLICT(id) DO NOTHING")
 init_db()
 
 def auth(authorization: str | None = Header(default=None)):
@@ -151,7 +155,7 @@ def recover_owner(x:Recovery):
 def get_data(user=Depends(auth)):
     with con() as c:
         out={}
-        for t in ("businesses","accounts","movements","debts","obligations","budgets"):
+        for t in ("businesses","accounts","movements","debts","obligations","budgets","assets"):
             c.execute("SELECT * FROM "+t+" ORDER BY id DESC"); out[t]=c.fetchall()
         return out
 
@@ -172,7 +176,7 @@ def add(table:str,x:Data,user=Depends(auth)):
                 if not c.fetchone(): raise HTTPException(422,"Registra primero el negocio.")
             bal=float(d.get("balance") or 0)
             if bal<0: raise HTTPException(422,"Saldo inicial no válido.")
-            c.execute("INSERT INTO accounts(name,kind,scope,business_id,balance) VALUES(%s,%s,%s,%s,%s) RETURNING id",(name,d.get("kind") or "bank",sc,bid,bal))
+            c.execute("INSERT INTO accounts(name,kind,scope,business_id,balance,is_reserve) VALUES(%s,%s,%s,%s,%s,%s) RETURNING id",(name,d.get("kind") or "bank",sc,bid,bal,bool(d.get("is_reserve",False))))
         elif table=="movements":
             sc=valid_scope(d.get("scope")); n=valid_amount(d.get("amount")); k=d.get("kind")
             day=str(d.get("day") or date.today().isoformat())
@@ -182,6 +186,14 @@ def add(table:str,x:Data,user=Depends(auth)):
             apply_movement(c,item)
             c.execute("INSERT INTO movements(kind,scope,concept,amount,day,account_id,dest_id,business_id,category) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",
             (k,sc,str(d.get("concept") or "Sin concepto").strip(),n,day,item["account_id"],item["dest_id"],item["business_id"],d.get("category") or "General"))
+        elif table=="assets":
+            name=str(d.get("name") or "").strip(); sc=valid_scope(d.get("scope")); category=str(d.get("category") or "Otro").strip(); value=float(d.get("current_value") or 0)
+            if not name or value<0 or value>1000000000: raise HTTPException(422,"Revisa el nombre y valor del activo.")
+            bid=d.get("business_id") if sc=="business" else None
+            if sc=="business":
+                c.execute("SELECT id FROM businesses WHERE id=%s",(bid,))
+                if not c.fetchone(): raise HTTPException(422,"Registra primero el negocio.")
+            c.execute("INSERT INTO assets(name,scope,business_id,category,current_value) VALUES(%s,%s,%s,%s,%s) RETURNING id",(name,sc,bid,category,value))
         elif table=="debts":
             creditor=str(d.get("creditor") or "").strip()
             if not creditor: raise HTTPException(422,"Escribe el acreedor.")
@@ -201,6 +213,14 @@ def add(table:str,x:Data,user=Depends(auth)):
         else: raise HTTPException(404,"Sección inválida.")
         return {"id":c.fetchone()["id"],"ok":True}
 
+@app.post("/api/settings/emergency-fund")
+def update_emergency_settings(x:Data,user=Depends(auth)):
+    try: months=int(x.data.get("target_months",3))
+    except (TypeError,ValueError): raise HTTPException(422,"Selecciona entre 1 y 12 meses.")
+    if months<1 or months>12: raise HTTPException(422,"El objetivo debe estar entre 1 y 12 meses.")
+    with con() as c: c.execute("INSERT INTO financial_settings(id,emergency_months) VALUES(1,%s) ON CONFLICT(id) DO UPDATE SET emergency_months=EXCLUDED.emergency_months",(months,))
+    return {"ok":True,"target_months":months}
+
 @app.post("/api/obligations/{oid}/paid")
 def paid(oid:int,user=Depends(auth)):
     with con() as c:
@@ -214,7 +234,22 @@ def dashboard(user=Depends(auth)):
     with con() as c:
         def total(sql,args=()):
             c.execute(sql,args); return float(c.fetchone()["v"] or 0)
+        c.execute("SELECT emergency_months FROM financial_settings WHERE id=1"); setting=c.fetchone()
+        emergency_months=int(setting["emergency_months"]) if setting else 3
+        reserve=total("SELECT COALESCE(SUM(balance),0) v FROM accounts WHERE scope='personal' AND is_reserve=TRUE")
+        monthly_expense_avg=total("SELECT COALESCE(SUM(amount),0)/3.0 v FROM movements WHERE kind='expense' AND scope='personal' AND day >= %s",( (date.today()-timedelta(days=90)).isoformat(), ))
+        personal_assets=total("SELECT COALESCE(SUM(current_value),0) v FROM assets WHERE scope='personal'")
+        business_assets=total("SELECT COALESCE(SUM(current_value),0) v FROM assets WHERE scope='business'")
         return {
+        "emergency_months":emergency_months,
+        "emergency_fund_balance":reserve,
+        "emergency_monthly_expense_avg":monthly_expense_avg,
+        "emergency_fund_target":monthly_expense_avg*emergency_months,
+        "personal_assets":personal_assets,
+        "business_assets":business_assets,
+        "personal_net_worth":total("SELECT COALESCE(SUM(balance),0) v FROM accounts WHERE scope='personal'")+personal_assets-total("SELECT COALESCE(SUM(balance),0) v FROM debts WHERE scope='personal'"),
+        "business_net_worth":total("SELECT COALESCE(SUM(balance),0) v FROM accounts WHERE scope='business'")+business_assets-total("SELECT COALESCE(SUM(balance),0) v FROM debts WHERE scope='business'"),
+        "net_worth":total("SELECT COALESCE(SUM(balance),0) v FROM accounts")+personal_assets+business_assets-total("SELECT COALESCE(SUM(balance),0) v FROM debts"),
         "cash":total("SELECT COALESCE(SUM(balance),0) v FROM accounts WHERE scope='personal'"),
         "business_cash":total("SELECT COALESCE(SUM(balance),0) v FROM accounts WHERE scope='business'"),
         "debt":total("SELECT COALESCE(SUM(balance),0) v FROM debts WHERE scope='personal'"),
