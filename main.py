@@ -332,9 +332,10 @@ def travis(x:Data,user=Depends(auth)):
         "obligaciones_vencidas":d["overdue"],
         "obligaciones_pendientes":d["obligations"]
     }
-    key=os.getenv("OPENAI_API_KEY")
+    # Travis usa Groq Free como proveedor principal. No llama a OpenAI para evitar cargos.
+    key=os.getenv("GROQ_API_KEY")
     if key:
-        model=os.getenv("OPENAI_MODEL","gpt-4o-mini")
+        model=os.getenv("GROQ_MODEL","openai/gpt-oss-120b")
         system=("Eres Travis, un asistente de inteligencia artificial general, conversacional y multidisciplinario integrado en la aplicación Finanzas. "
         "Tu alcance no se limita a las finanzas: responde preguntas de ciencia, historia, cultura, tecnología, medicina general, programación, educación, negocios, matemáticas, idiomas y temas cotidianos. "
         "Contesta directamente y con profundidad proporcional a la pregunta. Explica conceptos desde cero cuando sea necesario, da ejemplos prácticos y adapta el nivel al usuario. "
@@ -349,28 +350,28 @@ def travis(x:Data,user=Depends(auth)):
         "No fuerces una respuesta financiera si la pregunta trata de otro tema. Para preguntas generales, responde como asistente general y no recites el estado financiero del usuario si no es pertinente. "
         "Estructura respuestas complejas con: respuesta o diagnóstico; explicación; pasos accionables; incertidumbres o datos faltantes. Mantén un tono claro, respetuoso, natural y útil.")
         payload={"model":model,"messages":[{"role":"system","content":system},
-        {"role":"user","content":"Pestaña actual: "+page+"\nPregunta: "+(question or "Analiza mi situación y dime las tres prioridades.")+
-        "\nDatos registrados (JSON): "+json.dumps(snapshot,ensure_ascii=False,default=str)}],
+        {"role":"user","content":"Pestaña actual: "+page+"\\nPregunta: "+(question or "Analiza mi situación y dime las tres prioridades.")+
+        "\\nDatos registrados (JSON): "+json.dumps(snapshot,ensure_ascii=False,default=str)}],
         "temperature":0.25,"max_tokens":1300}
         try:
-            req=urllib.request.Request("https://api.openai.com/v1/chat/completions",
+            req=urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",
                 data=json.dumps(payload).encode("utf-8"),
                 headers={"Authorization":"Bearer "+key,"Content-Type":"application/json"},
                 method="POST")
-            with urllib.request.urlopen(req,timeout=28) as response:
+            with urllib.request.urlopen(req,timeout=35) as response:
                 result=json.loads(response.read().decode("utf-8"))
             answer=result["choices"][0]["message"]["content"].strip()
-            return {"answer":answer,"mode":"IA generativa conectada","ai_enabled":True}
+            return {"answer":answer,"mode":"Groq Free · IA generativa","ai_enabled":True}
         except urllib.error.HTTPError as e:
             try:
                 detail=json.loads(e.read().decode("utf-8")).get("error",{}).get("message","")
             except Exception:
                 detail=""
-            print("TRAVIS_OPENAI_HTTP_ERROR",e.code,detail[:500],flush=True)
-            return {"answer":"No pude obtener respuesta de la IA. OpenAI devolvió un error HTTP "+str(e.code)+". "+(detail[:350] if detail else "Revisa la clave, el modelo y la facturación de tu cuenta de API."),"mode":"error de conexión IA","ai_enabled":False}
+            print("TRAVIS_GROQ_HTTP_ERROR",e.code,detail[:500],flush=True)
+            return {"answer":"No pude obtener respuesta de Groq (HTTP "+str(e.code)+"). "+(detail[:350] if detail else "Revisa la clave GROQ_API_KEY y los límites gratuitos de tu cuenta."),"mode":"error de conexión Groq","ai_enabled":False}
         except Exception as e:
-            print("TRAVIS_OPENAI_ERROR",type(e).__name__,str(e)[:500],flush=True)
-            return {"answer":"No pude conectar con la IA en este momento ("+type(e).__name__+"). Intenta de nuevo en unos segundos. No he sustituido tu pregunta por un análisis financiero automático.","mode":"error de conexión IA","ai_enabled":False}
+            print("TRAVIS_GROQ_ERROR",type(e).__name__,str(e)[:500],flush=True)
+            return {"answer":"No pude conectar con Groq en este momento ("+type(e).__name__+"). Intenta de nuevo en unos segundos.","mode":"error de conexión Groq","ai_enabled":False}
     advice=[]
     surplus=d["income"]-d["expense"]
     if d["overdue"]: advice.append("Prioridad 1: revisa las "+str(int(d["overdue"]))+" obligaciones vencidas y contacta al acreedor antes de destinar excedentes a pagos anticipados.")
@@ -393,7 +394,7 @@ def travis(x:Data,user=Depends(auth)):
 
 @app.get("/api/travis/status")
 def travis_status(user=Depends(auth)):
-    return {"ai_enabled":bool(os.getenv("OPENAI_API_KEY")),"model":os.getenv("OPENAI_MODEL","gpt-4o-mini") if os.getenv("OPENAI_API_KEY") else None}
+    return {"ai_enabled":bool(os.getenv("GROQ_API_KEY")),"provider":"Groq" if os.getenv("GROQ_API_KEY") else None,"model":os.getenv("GROQ_MODEL","openai/gpt-oss-120b") if os.getenv("GROQ_API_KEY") else None}
 
 @app.get("/api/export")
 def export(user=Depends(auth)): return get_data(user)
