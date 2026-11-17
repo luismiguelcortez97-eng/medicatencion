@@ -110,7 +110,7 @@ input[type="date"],input[type="time"]{-webkit-appearance:none;appearance:none;mi
  html{scroll-behavior:auto}
  input,select,textarea{font-size:16px}
  button{cursor:pointer}
- .nav{transform:translateZ(0);-webkit-transform:translateZ(0)}
+ /* No crear una capa transformada sobre la navegación sticky en Safari */
  .tablewrap{transform:translateZ(0);-webkit-transform:translateZ(0)}
 }
 
@@ -131,9 +131,10 @@ input[type="date"],input[type="time"]{-webkit-appearance:none;appearance:none;mi
  .travisbox{grid-template-columns:minmax(0,1fr);text-align:center}
  .dog{height:130px}
  .travisinput{flex-direction:column}
- .nav{position:sticky;top:0;z-index:18;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;margin-left:-2px;margin-right:-2px}
- .nav::-webkit-scrollbar{display:none}
- .nav button{min-height:44px;flex:0 0 auto}
+ .nav{position:sticky;top:env(safe-area-inset-top);z-index:40;display:flex;flex-wrap:nowrap;gap:6px;width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;touch-action:pan-x;margin-left:0;margin-right:0;padding:7px;background:var(--paper);border:1px solid var(--line);box-shadow:0 3px 12px #10223818}
+ .nav::-webkit-scrollbar{height:4px}
+ .nav::-webkit-scrollbar-thumb{background:#9aaabd;border-radius:8px}
+ .nav button{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;min-height:48px;flex:0 0 auto;padding:11px 15px;font-size:13px;white-space:nowrap;touch-action:pan-x;pointer-events:auto;-webkit-user-select:none;user-select:none}
  .tablewrap{display:block;width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
  .tablewrap table{width:max-content;min-width:590px;max-width:none}
  .notification-panel{position:fixed;top:calc(env(safe-area-inset-top) + 12px);right:12px;width:min(390px,calc(100vw - 24px));max-height:calc(100dvh - 30px - env(safe-area-inset-bottom))}
@@ -208,7 +209,7 @@ async function register(){try{if(v('newuser').trim().length<3)throw Error('El us
 function logout(){localStorage.removeItem('cf_token');location.reload()}
 let currentView='inicio';
 function goView(view){const nav=$('nav');const target=nav&&Array.from(nav.querySelectorAll('button[data-v]')).find(b=>b.dataset.v===view);const panel=$(view);if(!target||!panel)return;nav.querySelectorAll('button[data-v]').forEach(x=>x.classList.toggle('active',x===target));currentView=view;const context=$('travisContext');if(context)context.textContent='Sección: '+target.textContent+'. Pregúntame sobre tus cifras.';if(view==='movimientos'&&$('mDay'))$('mDay').value=mxDateISO();}
-const mainNav=$('nav');if(mainNav){mainNav.addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(!b||!mainNav.contains(b))return;e.preventDefault();e.stopPropagation();goView(b.dataset.v)},true);mainNav.querySelectorAll('button[data-v]').forEach(b=>{b.type='button';b.style.pointerEvents='auto';});}
+const mainNav=$('nav');if(mainNav){mainNav.querySelectorAll('button[data-v]').forEach(b=>{b.type='button';b.style.pointerEvents='auto';b.addEventListener('click',e=>{e.preventDefault();goView(b.dataset.v);});});}
 function quickMovement(kind){goView('movimientos');$('mKind').value=kind;$('mScope').value='personal';movementFields();$('mDay').value=mxDateISO();$('mConcept').focus({preventScroll:true});$('mConcept').scrollIntoView({behavior:'smooth',block:'center'});}
 function quickPayments(){goView('obligaciones');$('obligaciones').scrollIntoView({behavior:'smooth',block:'start'});}
 async function add(table,data){try{await api(table,'POST',{data});await refresh();notify('Registro guardado correctamente');return true}catch(e){notify(e.message);return false}}
