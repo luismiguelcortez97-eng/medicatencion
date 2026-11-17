@@ -1,4 +1,4 @@
-import os, hmac, hashlib, secrets
+import os, hmac, hashlib, secrets, json, urllib.request, urllib.error
 from datetime import datetime, timedelta, date
 from contextlib import contextmanager
 from pathlib import Path
@@ -305,26 +305,79 @@ def insights(user=Depends(auth)):
 
 @app.post("/api/travis")
 def travis(x:Data,user=Depends(auth)):
-    d=dashboard(user); surplus=d["income"]-d["expense"]; advice=[]
-    if d["overdue"]: advice.append("Tienes "+str(int(d["overdue"]))+" obligación(es) vencida(s): atiéndelas o negocia antes de abonar extra a deudas.")
-    if d["obligations"]: advice.append("Separa primero el dinero de tus "+str(int(d["obligations"]))+" obligación(es) pendientes.")
-    if surplus<0: advice.append("Tu gasto supera tu ingreso personal en $"+format(abs(surplus),",.2f")+" MXN. Revisa gastos variables y pausa los no esenciales.")
-    elif surplus>0: advice.append("Tu flujo personal es positivo por $"+format(surplus,",.2f")+" MXN. Reserva vencimientos y liquidez antes de acelerar deudas.")
-    if d["debt"] and d["cash"]<d["debt"]: advice.append("Tu deuda personal supera tu efectivo personal. Protege liquidez y pagos mínimos; después prioriza la tasa más alta.")
-    elif d["debt"]: advice.append("Ordena tus deudas por tasa anual; cubre mínimos y dirige excedentes a la tasa más alta.")
-    if not advice: advice.append("Faltan registros para un diagnóstico confiable. Captura saldos iniciales, movimientos, deudas y vencimientos.")
-    q=str(x.data.get("question") or "").strip()[:800]
-    answer=("TRAVIS · ANÁLISIS FINANCIERO\n\n"
-    +"Efectivo personal: $"+format(d["cash"],",.2f")+" MXN\n"
-    +"Deuda personal: $"+format(d["debt"],",.2f")+" MXN\n"
-    +"Ingreso personal del mes: $"+format(d["income"],",.2f")+" MXN\n"
-    +"Gasto personal del mes: $"+format(d["expense"],",.2f")+" MXN\n"
-    +"Efectivo separado en negocios: $"+format(d["business_cash"],",.2f")+" MXN\n"
-    +"Flujo personal: $"+format(surplus,",.2f")+" MXN\n\n"
-    +"RECOMENDACIONES:\n- "+"\n- ".join(advice)
-    +"\n\nLas transferencias internas no son ingresos. Los retiros de negocio a cuenta personal sí son ingreso personal y reducen el saldo del negocio. No ejecuto pagos ni transferencias.")
-    if q: answer+="\n\nTu pregunta: "+q+"\nMi recomendación se basa en los registros disponibles; no inventaré datos faltantes."
-    return {"answer":answer,"mode":"análisis financiero basado en reglas y datos registrados"}
+    question=str(x.data.get("question") or "").strip()[:1200]
+    page=str(x.data.get("context") or "general")[:80]
+    d=dashboard(user)
+    ins=insights(user)
+    snapshot={
+        "moneda":"MXN",
+        "efectivo_personal":d["cash"],
+        "deuda_personal":d["debt"],
+        "ingreso_personal_mes":d["income"],
+        "gasto_personal_mes":d["expense"],
+        "flujo_personal_mes":round(d["income"]-d["expense"],2),
+        "efectivo_negocios_separado":d["business_cash"],
+        "deuda_negocios_separada":d["business_debt"],
+        "fondo_emergencia":d["emergency_fund_balance"],
+        "objetivo_fondo_emergencia":d["emergency_fund_target"],
+        "promedio_ingreso_90_dias":ins["average_monthly_income"],
+        "promedio_gasto_90_dias":ins["average_monthly_expense"],
+        "excedente_estimado":ins["average_monthly_surplus"],
+        "brecha_fondo":ins["emergency_gap"],
+        "distribucion_sugerida":ins["allocation"],
+        "deudas_por_prioridad":ins["debt_priority"][:12],
+        "presupuestos":ins["budgets"][:20],
+        "obligaciones_vencidas":d["overdue"],
+        "obligaciones_pendientes":d["obligations"]
+    }
+    key=os.getenv("OPENAI_API_KEY")
+    if key:
+        model=os.getenv("OPENAI_MODEL","gpt-4o-mini")
+        system=("Eres Travis, asesor financiero prudente y claro. Analiza exclusivamente los datos entregados; "
+        "si faltan datos dilo. Responde en español mexicano, con prioridades concretas, cantidades en MXN y "
+        "pasos accionables. Separa siempre finanzas personales y empresariales. Transferencias entre cuentas "
+        "propias no son ingresos. Un retiro del negocio es ingreso personal pero no ingreso nuevo del negocio. "
+        "No ordenes ni afirmes ejecutar pagos, transferencias o movimientos. No inventes tasas, CAT, fechas ni "
+        "saldos. Considera liquidez, obligaciones vencidas, pagos mínimos, fondo de emergencia y riesgo. "
+        "Explica supuestos y advierte cuando la muestra de 90 días sea insuficiente.")
+        payload={"model":model,"messages":[{"role":"system","content":system},
+        {"role":"user","content":"Pestaña actual: "+page+"\nPregunta: "+(question or "Analiza mi situación y dime las tres prioridades.")+
+        "\nDatos registrados (JSON): "+json.dumps(snapshot,ensure_ascii=False,default=str)}],
+        "temperature":0.25,"max_tokens":850}
+        try:
+            req=urllib.request.Request("https://api.openai.com/v1/chat/completions",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Authorization":"Bearer "+key,"Content-Type":"application/json"},
+                method="POST")
+            with urllib.request.urlopen(req,timeout=28) as response:
+                result=json.loads(response.read().decode("utf-8"))
+            answer=result["choices"][0]["message"]["content"].strip()
+            return {"answer":answer,"mode":"IA generativa conectada","ai_enabled":True}
+        except Exception:
+            pass
+    advice=[]
+    surplus=d["income"]-d["expense"]
+    if d["overdue"]: advice.append("Prioridad 1: revisa las "+str(int(d["overdue"]))+" obligaciones vencidas y contacta al acreedor antes de destinar excedentes a pagos anticipados.")
+    if surplus<0: advice.append("Prioridad 1: tu gasto personal del mes supera el ingreso registrado por "+format(abs(surplus),",.2f")+" MXN. Protege vivienda, alimentación, salud y servicios; identifica gastos que puedas pausar.")
+    elif surplus>0: advice.append("Prioridad: tu flujo personal mensual es positivo en "+format(surplus,",.2f")+" MXN. Separa primero obligaciones y pagos mínimos; luego distribuye el excedente según el fondo y las tasas reales.")
+    else: advice.append("Tu flujo mensual registrado está en equilibrio. Evita comprometer dinero que todavía no ha entrado.")
+    if ins["emergency_gap"]>0: advice.append("Tu fondo de emergencia tiene una brecha estimada de "+format(ins["emergency_gap"],",.2f")+" MXN. Construye liquidez gradualmente sin dejar de cubrir pagos mínimos.")
+    if ins["debt_priority"]: advice.append("Para acelerar deudas, después de cubrir mínimos, compara CAT/tasa efectiva y penalizaciones; el orden mostrado por tasa anual es orientativo.")
+    answer=("TRAVIS · ANÁLISIS CON TUS REGISTROS\n\n"
+    +"Efectivo personal: "+format(d["cash"],",.2f")+" MXN\n"
+    +"Deuda personal: "+format(d["debt"],",.2f")+" MXN\n"
+    +"Ingreso / gasto personal del mes: "+format(d["income"],",.2f")+" / "+format(d["expense"],",.2f")+" MXN\n"
+    +"Efectivo de negocios (separado): "+format(d["business_cash"],",.2f")+" MXN\n\n"
+    +"MIS PRIORIDADES\n- "+"\n- ".join(advice)
+    +"\n\nLa distribución y proyección son estimaciones a partir de tus movimientos registrados. "
+    +"No son instrucciones de inversión ni sustituyen revisar contratos y tasas. "
+    +"Las transferencias propias no son ingresos; los retiros del negocio reducen su caja y aumentan el efectivo personal. "
+    +"No ejecuto movimientos.")
+    return {"answer":answer,"mode":"motor financiero basado en reglas; falta configurar OPENAI_API_KEY para IA generativa","ai_enabled":False}
+
+@app.get("/api/travis/status")
+def travis_status(user=Depends(auth)):
+    return {"ai_enabled":bool(os.getenv("OPENAI_API_KEY")),"model":os.getenv("OPENAI_MODEL","gpt-4o-mini") if os.getenv("OPENAI_API_KEY") else None}
 
 @app.get("/api/export")
 def export(user=Depends(auth)): return get_data(user)
