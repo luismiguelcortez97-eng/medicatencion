@@ -273,6 +273,37 @@ def movement_payload(d):
     bid=d.get("business_id") if sc=="business" or k=="withdrawal" else None
     return {"kind":k,"scope":sc,"amount":amount,"day":day,"concept":str(d.get("concept") or "Sin concepto").strip(),"account_id":d.get("account_id"),"dest_id":d.get("dest_id"),"business_id":bid,"category":d.get("category") or "General"}
 
+@app.put("/api/accounts/{account_id}")
+def update_account(account_id:int,x:Data,user=Depends(auth)):
+    d=x.data
+    name=str(d.get("name") or "").strip()
+    kind=str(d.get("kind") or "bank")
+    if not name: raise HTTPException(422,"Escribe el nombre de la cuenta.")
+    if kind not in ("bank","cash","savings","credit"): raise HTTPException(422,"Tipo de cuenta inválido.")
+    with con() as c:
+        c.execute("SELECT * FROM accounts WHERE id=%s FOR UPDATE",(account_id,))
+        old=c.fetchone()
+        if not old: raise HTTPException(404,"Cuenta no encontrada.")
+        # La pertenencia y el saldo no se editan aquí para no alterar movimientos históricos.
+        c.execute("UPDATE accounts SET name=%s,kind=%s,is_reserve=%s WHERE id=%s",
+          (name,kind,bool(d.get("is_reserve",False)),account_id))
+    return {"ok":True,"id":account_id}
+
+@app.delete("/api/accounts/{account_id}")
+def delete_account(account_id:int,user=Depends(auth)):
+    with con() as c:
+        c.execute("SELECT * FROM accounts WHERE id=%s FOR UPDATE",(account_id,))
+        account=c.fetchone()
+        if not account: raise HTTPException(404,"Cuenta no encontrada.")
+        c.execute("SELECT COUNT(*) AS n FROM movements WHERE account_id=%s OR dest_id=%s",(account_id,account_id))
+        related=int(c.fetchone()["n"])
+        if related:
+            raise HTTPException(409,"No se puede eliminar: esta cuenta tiene movimientos históricos. Primero elimina o reasigna esos movimientos.")
+        if abs(float(account["balance"] or 0))>0.005:
+            raise HTTPException(409,"No se puede eliminar una cuenta con saldo. Deja su saldo en cero antes de eliminarla.")
+        c.execute("DELETE FROM accounts WHERE id=%s",(account_id,))
+    return {"ok":True,"id":account_id}
+
 @app.put("/api/movements/{movement_id}")
 def update_movement(movement_id:int,x:Data,user=Depends(auth)):
     item=movement_payload(x.data)
