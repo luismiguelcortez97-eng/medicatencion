@@ -1,4 +1,4 @@
-import os, hmac, hashlib, secrets, json, urllib.request, urllib.error
+import os, hmac, hashlib, secrets, json, urllib.request, urllib.error, calendar
 from datetime import datetime, timedelta, date
 from contextlib import contextmanager
 from pathlib import Path
@@ -40,7 +40,8 @@ def init_db():
     """ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_reserve BOOLEAN NOT NULL DEFAULT FALSE""",
     """ALTER TABLE debts ADD COLUMN IF NOT EXISTS due_type TEXT NOT NULL DEFAULT 'monthly_day'""",
     """ALTER TABLE debts ADD COLUMN IF NOT EXISTS due_date DATE""",
-    """ALTER TABLE debts ADD COLUMN IF NOT EXISTS weekly_day INTEGER"""
+    """ALTER TABLE debts ADD COLUMN IF NOT EXISTS weekly_day INTEGER""",
+    """ALTER TABLE obligations ADD COLUMN IF NOT EXISTS frequency TEXT NOT NULL DEFAULT 'once'"""
     ]
     with con() as c:
         for s in sqls: c.execute(s)
@@ -223,10 +224,12 @@ def add(table:str,x:Data,user=Depends(auth)):
             c.execute("INSERT INTO debts(creditor,scope,business_id,balance,rate,min_payment,due_day,due_type,due_date,weekly_day) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",(creditor,sc,d.get("business_id") if sc=="business" else None,n,rate,minimum,due,due_type,due_date,weekly_day))
         elif table=="obligations":
             name=str(d.get("name") or "").strip(); due=str(d.get("due_date") or "")
+            frequency=str(d.get("frequency") or "once")
             if not name: raise HTTPException(422,"Escribe la obligación.")
             try: datetime.strptime(due,"%Y-%m-%d")
-            except: raise HTTPException(422,"Selecciona fecha de vencimiento.")
-            c.execute("INSERT INTO obligations(name,scope,amount,due_date) VALUES(%s,%s,%s,%s) RETURNING id",(name,valid_scope(d.get("scope")),valid_amount(d.get("amount")),due))
+            except ValueError: raise HTTPException(422,"Selecciona la primera fecha de vencimiento.")
+            if frequency not in ("once","weekly","monthly"): raise HTTPException(422,"Selecciona una frecuencia válida.")
+            c.execute("INSERT INTO obligations(name,scope,amount,due_date,frequency) VALUES(%s,%s,%s,%s,%s) RETURNING id",(name,valid_scope(d.get("scope")),valid_amount(d.get("amount")),due,frequency))
         elif table=="budgets":
             name=str(d.get("name") or "").strip(); cat=str(d.get("category") or "").strip()
             if not name or not cat: raise HTTPException(422,"Completa nombre y categoría.")
@@ -286,9 +289,22 @@ def update_emergency_settings(x:Data,user=Depends(auth)):
 @app.post("/api/obligations/{oid}/paid")
 def paid(oid:int,user=Depends(auth)):
     with con() as c:
-        c.execute("UPDATE obligations SET paid=1 WHERE id=%s RETURNING id",(oid,))
-        if not c.fetchone(): raise HTTPException(404,"Obligación no encontrada.")
-    return {"ok":True}
+        c.execute("SELECT id,due_date,frequency FROM obligations WHERE id=%s FOR UPDATE",(oid,))
+        row=c.fetchone()
+        if not row: raise HTTPException(404,"Obligación no encontrada.")
+        frequency=row.get("frequency") or "once"
+        if frequency=="weekly":
+            next_due=(date.fromisoformat(str(row["due_date"])[:10])+timedelta(days=7)).isoformat()
+            c.execute("UPDATE obligations SET due_date=%s,paid=0 WHERE id=%s",(next_due,oid))
+        elif frequency=="monthly":
+            current=date.fromisoformat(str(row["due_date"])[:10])
+            year=current.year+(1 if current.month==12 else 0)
+            month=1 if current.month==12 else current.month+1
+            next_due=date(year,month,min(current.day,calendar.monthrange(year,month)[1])).isoformat()
+            c.execute("UPDATE obligations SET due_date=%s,paid=0 WHERE id=%s",(next_due,oid))
+        else:
+            c.execute("UPDATE obligations SET paid=1 WHERE id=%s",(oid,))
+    return {"ok":True,"next_due":next_due if frequency in ("weekly","monthly") else None}
 
 @app.get("/api/dashboard")
 def dashboard(user=Depends(auth)):
