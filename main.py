@@ -37,7 +37,10 @@ def init_db():
     """CREATE TABLE IF NOT EXISTS budgets(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,scope TEXT NOT NULL,category TEXT NOT NULL,monthly_limit DOUBLE PRECISION NOT NULL)""",
     """CREATE TABLE IF NOT EXISTS assets(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,scope TEXT NOT NULL,business_id BIGINT REFERENCES businesses(id),category TEXT NOT NULL,current_value DOUBLE PRECISION NOT NULL CHECK(current_value>=0))""",
     """CREATE TABLE IF NOT EXISTS financial_settings(id INTEGER PRIMARY KEY CHECK(id=1),emergency_months INTEGER NOT NULL DEFAULT 3 CHECK(emergency_months BETWEEN 1 AND 12))""",
-    """ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_reserve BOOLEAN NOT NULL DEFAULT FALSE"""
+    """ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_reserve BOOLEAN NOT NULL DEFAULT FALSE""",
+    """ALTER TABLE debts ADD COLUMN IF NOT EXISTS due_type TEXT NOT NULL DEFAULT 'monthly_day'""",
+    """ALTER TABLE debts ADD COLUMN IF NOT EXISTS due_date DATE""",
+    """ALTER TABLE debts ADD COLUMN IF NOT EXISTS weekly_day INTEGER"""
     ]
     with con() as c:
         for s in sqls: c.execute(s)
@@ -199,9 +202,25 @@ def add(table:str,x:Data,user=Depends(auth)):
         elif table=="debts":
             creditor=str(d.get("creditor") or "").strip()
             if not creditor: raise HTTPException(422,"Escribe el acreedor.")
-            sc=valid_scope(d.get("scope")); n=valid_amount(d.get("balance")); rate=max(0,float(d.get("rate") or 0)); minimum=max(0,float(d.get("min_payment") or 0)); due=d.get("due_day")
-            if due is not None and not 1<=int(due)<=31: raise HTTPException(422,"Día de pago entre 1 y 31.")
-            c.execute("INSERT INTO debts(creditor,scope,business_id,balance,rate,min_payment,due_day) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING id",(creditor,sc,d.get("business_id") if sc=="business" else None,n,rate,minimum,due))
+            sc=valid_scope(d.get("scope")); n=valid_amount(d.get("balance")); rate=max(0,float(d.get("rate") or 0)); minimum=max(0,float(d.get("min_payment") or 0))
+            due_type=str(d.get("due_type") or "date")
+            due_date=d.get("due_date") or None
+            weekly_day=d.get("weekly_day")
+            due=None
+            if due_type=="date":
+                if not due_date: raise HTTPException(422,"Selecciona la fecha exacta de pago en el calendario.")
+                try: datetime.strptime(str(due_date),"%Y-%m-%d")
+                except ValueError: raise HTTPException(422,"La fecha de pago no es válida.")
+            elif due_type=="weekly":
+                try: weekly_day=int(weekly_day)
+                except (TypeError,ValueError): raise HTTPException(422,"Selecciona el día semanal de pago.")
+                if weekly_day not in range(7): raise HTTPException(422,"El día semanal no es válido.")
+            elif due_type=="monthly_day":
+                due=d.get("due_day")
+                if due is None or not 1<=int(due)<=31: raise HTTPException(422,"Selecciona el día mensual de pago.")
+                due=int(due)
+            else: raise HTTPException(422,"Selecciona una modalidad de pago válida.")
+            c.execute("INSERT INTO debts(creditor,scope,business_id,balance,rate,min_payment,due_day,due_type,due_date,weekly_day) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id",(creditor,sc,d.get("business_id") if sc=="business" else None,n,rate,minimum,due,due_type,due_date,weekly_day))
         elif table=="obligations":
             name=str(d.get("name") or "").strip(); due=str(d.get("due_date") or "")
             if not name: raise HTTPException(422,"Escribe la obligación.")
@@ -225,20 +244,34 @@ def update_debt(debt_id:int,x:Data,user=Depends(auth)):
     try:
         rate=float(d.get("rate") or 0)
         minimum=float(d.get("min_payment") or 0)
-        due=int(d["due_day"]) if d.get("due_day") not in (None,"") else None
     except (TypeError,ValueError):
-        raise HTTPException(422,"Revisa tasa, pago mínimo y día de pago.")
+        raise HTTPException(422,"Revisa tasa y pago mínimo.")
     if not 0<=rate<=10000 or not 0<=minimum<=1000000000:
         raise HTTPException(422,"La tasa o el pago mínimo no son válidos.")
-    if due is not None and not 1<=due<=31:
-        raise HTTPException(422,"Día de pago entre 1 y 31.")
+    due_type=str(d.get("due_type") or "date")
+    due_date=d.get("due_date") or None
+    weekly_day=d.get("weekly_day")
+    due=None
+    if due_type=="date":
+        if not due_date: raise HTTPException(422,"Selecciona la fecha exacta de pago en el calendario.")
+        try: datetime.strptime(str(due_date),"%Y-%m-%d")
+        except ValueError: raise HTTPException(422,"La fecha de pago no es válida.")
+    elif due_type=="weekly":
+        try: weekly_day=int(weekly_day)
+        except (TypeError,ValueError): raise HTTPException(422,"Selecciona el día semanal de pago.")
+        if weekly_day not in range(7): raise HTTPException(422,"El día semanal no es válido.")
+    elif due_type=="monthly_day":
+        try: due=int(d["due_day"])
+        except (TypeError,ValueError,KeyError): raise HTTPException(422,"Selecciona el día mensual de pago.")
+        if not 1<=due<=31: raise HTTPException(422,"Día de pago entre 1 y 31.")
+    else: raise HTTPException(422,"Selecciona una modalidad de pago válida.")
     bid=d.get("business_id") if sc=="business" else None
     with con() as c:
         if sc=="business":
             c.execute("SELECT id FROM businesses WHERE id=%s",(bid,))
             if not c.fetchone(): raise HTTPException(422,"Selecciona un negocio válido.")
-        c.execute("UPDATE debts SET creditor=%s,scope=%s,business_id=%s,balance=%s,rate=%s,min_payment=%s,due_day=%s WHERE id=%s RETURNING id",
-            (creditor,sc,bid,balance,rate,minimum,due,debt_id))
+        c.execute("UPDATE debts SET creditor=%s,scope=%s,business_id=%s,balance=%s,rate=%s,min_payment=%s,due_day=%s,due_type=%s,due_date=%s,weekly_day=%s WHERE id=%s RETURNING id",
+            (creditor,sc,bid,balance,rate,minimum,due,due_type,due_date,weekly_day,debt_id))
         if not c.fetchone(): raise HTTPException(404,"No se encontró esa deuda.")
     return {"ok":True,"id":debt_id}
 
