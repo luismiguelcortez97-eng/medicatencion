@@ -115,7 +115,7 @@ $('budgetInsights').innerHTML=table(['Presupuesto','Categoría','Límite','Gasta
 $('projectionNote').textContent=ins.projection_note;
 $('projectionRows').innerHTML=table(['Horizonte','Efectivo proyectado'],ins.projections.map(p=>tr([p.months+' meses',money(p.projected_cash)])));
 }
-async function init(){try{await api('dashboard');$('auth').classList.add('hidden');$('app').classList.remove('hidden');await refresh()}catch(e){localStorage.removeItem('cf_token');token=null;$('auth').classList.remove('hidden');$('authmsg').textContent=e.message}}
+async function init(){try{await api('dashboard');$('auth').classList.add('hidden');$('app').classList.remove('hidden');$('travisDock').classList.remove('hidden');await refresh()}catch(e){localStorage.removeItem('cf_token');token=null;$('auth').classList.remove('hidden');$('authmsg').textContent=e.message}}
 async function addAccount(){await add('accounts',{name:v('aName'),kind:v('aKind'),scope:v('aScope'),business_id:num('aBiz'),balance:num('aBal')??0,is_reserve:v('aReserve')==='true'})}
 async function addAsset(){await add('assets',{name:v('assetName'),category:v('assetCategory'),scope:v('assetScope'),business_id:num('assetBiz'),current_value:num('assetValue')??0})}
 async function saveEmergencyGoal(){try{await api('settings/emergency-fund','POST',{data:{target_months:Number(v('emMonths'))}});await refresh();notify('Objetivo de emergencia actualizado')}catch(e){notify(e.message)}}
