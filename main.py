@@ -356,7 +356,7 @@ def travis(x:Data,user=Depends(auth)):
         try:
             req=urllib.request.Request("https://api.groq.com/openai/v1/chat/completions",
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Authorization":"Bearer "+key,"Content-Type":"application/json"},
+                headers={"Authorization":"Bearer "+key,"Content-Type":"application/json","User-Agent":"FinanzasConTravis/1.0 (+https://finanzas-4l09.onrender.com)"},
                 method="POST")
             with urllib.request.urlopen(req,timeout=35) as response:
                 result=json.loads(response.read().decode("utf-8"))
